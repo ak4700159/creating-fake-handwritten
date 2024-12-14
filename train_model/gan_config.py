@@ -26,7 +26,7 @@ class GANConfig:
     
     # Stage 2 (후기 학습)
     stage2_l1_lambda: float = 50.0       # 감소
-    stage2_const_lambda: float = 15.0    # 감소
+    stage2_const_lambda: float = 30.0    # 감소
 
         # Adversarial loss 가중치 추가
     lambda_adv: float = 0.5
@@ -37,6 +37,7 @@ class GANConfig:
     
     # 학습 진행 관련 설정
     log_step: int = 20
+    eval_step: int = 1
     model_save_step: int = 10
     d_update_freq: int = 1
 

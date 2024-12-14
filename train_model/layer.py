@@ -7,7 +7,8 @@ class ConvBlock(nn.Module):
         layers = []
         layers.append(nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding))
         if use_bn:
-            layers.append(nn.BatchNorm2d(out_channels))
+            layers.append(nn.BatchNorm2d(out_channels, momentum=0.8))  # momentum 조정
+            layers.append(nn.InstanceNorm2d(out_channels))  # Instance normalization 추가
         layers.append(nn.LeakyReLU(0.2, inplace=True))
         self.block = nn.Sequential(*layers)
 
@@ -94,7 +95,7 @@ class Decoder(nn.Module):
             kernel_size=3,  # 4x4 크기 유지
             stride=1,      # 크기 확장 없음
             padding=1,     # 크기 유지를 위한 패딩
-            dropout=0.5
+            dropout=0.3
         )
 
         self.deconv3 = DeconvBlock(conv_dim * 16, conv_dim * 8, dropout=0.5)

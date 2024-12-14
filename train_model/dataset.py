@@ -6,8 +6,8 @@ from PIL import Image
 from io import BytesIO
 import torch
 
-# 데이터 로딩 전용 클래스 필요 없을 것으로 예상... 왜냐하면 기존 TrainDataProvider 클래스가 존재
-# 하지만 현재 학습 함수엔 필요할수도?
+# 해당 클래스는 .pkl 파일에 있는 데이터 로딩 역할
+# 기본 한글 폰트를 생성하고나서 .pkl로 만들 때 사용되는 TrainDataProvider 클래스와 다른 역할
 class FontDataset:
     """Enhanced dataset class for font images"""
     def __init__(
@@ -24,12 +24,14 @@ class FontDataset:
         self.resize_fix = resize_fix
         self.augment = augment
         
-        # Load and process data
+        # 데이터 로드
         self.data = self._load_data()
         
-    # 데이터 로드드
+    # 데이터 로드
     def _load_data(self) -> List[Tuple[int, np.ndarray]]:
         """Load and preprocess image data"""
+        # 최종 추출된 데이터가 담긴다.
+        # 라벨(폰트 아이디), 고딕체글자, 라벨에 맞는 글자
         processed_data = []
         try:
             with open(self.data_dir / self.file_name, "rb") as f:
@@ -42,6 +44,8 @@ class FontDataset:
                             
                         # 데이터 구조 확인 및 처리
                         if len(example) >= 2:  # 최소 (font_id, image_data) 형식
+                            # 정확한 데이터 구조는 
+                            # (label=font_id, charid, img_bytes) 형식을 가진다.
                             font_id = example[0]
                             img_data = example[-1]  # 마지막 요소가 이미지 데이터
                             
@@ -136,6 +140,8 @@ class FontDataset:
         font_id, source_img, target_img = self.data[idx]
         
         # Convert to tensor
+        # [1(DataLoader 떄문에), 1(gray scale), 128, 128]
+        #  = [batch size, channels, height, width]
         source_tensor = torch.from_numpy(source_img).unsqueeze(0)
         target_tensor = torch.from_numpy(target_img).unsqueeze(0)
         

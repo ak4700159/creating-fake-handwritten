@@ -365,29 +365,3 @@ class FontGAN(nn.Module):
     # 이미지에 점자 모양 노이즈가 생기는 원인에 대해 클로드한테 질문해본 결과
     # L1 손실과 적대적 손실(adversarial loss) 사이의 균형 문제 (L1 손실은 픽셀 단위의 차이를 줄이려고 하는 반면 적대적 손실은 전체적인 스타일의 사실성을 높이려고함)
     # skip connection을 통한 특징 전달 과정에서 발생하는 문제
-        """특징 맵의 통계적 특성을 기반으로 적응형 임계값을 계산합니다.
-        
-        이 함수는 특징 맵의 노이즈 레벨을 고려하여 최적의 임계값을 계산합니다.
-        
-        Args:
-            feature_map (torch.Tensor): 입력 특징 맵
-            
-        Returns:
-            torch.Tensor: 계산된 적응형 임계값
-        """
-        # 특징 맵의 절대값 통계량 계산
-        abs_features = torch.abs(feature_map)
-        mean = torch.mean(abs_features)
-        std = torch.std(feature_map)
-        
-        # 노이즈 레벨 추정을 위한 MAD 계산
-        median = torch.median(abs_features)
-        mad = torch.median(torch.abs(abs_features - median))
-        
-        # 노이즈 레벨에 따른 임계값 조정
-        noise_level = std / (mean + 1e-8)
-        base_threshold = mad * 1.4826  # 정규 분포 가정시의 일관성 상수
-        
-        # 동적 임계값 계산 및 범위 제한
-        adjusted_threshold = base_threshold * (1 + noise_level)
-        return torch.clamp(adjusted_threshold, 0.05, 0.3)

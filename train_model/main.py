@@ -118,10 +118,12 @@ def train_font_gan(config: GANConfig, data_dir: str, save_dir: str, device: torc
     
     # 학습용 데이터 로더 설정
     train_dataset = FontDataset(data_dir, "train.pkl", img_size = config.img_size)
+    # nun_workers = 데이터를 로드할 때 복수개의 프로세스로 멀티 프로세싱을 수행, CPU가 빠르게 데이터를 로딩해서 GPU의 연산 시간 비율을 높이기 위함.
+    # pin_meomeory = 메모리의 데이터를 GPU로 옮길 때 시간을 단축시키기 위함.
     train_loader = DataLoader(
         train_dataset,
         batch_size=config.batch_size,
-        shuffle=True,
+        shuffle=True, # 각 에포크마다 셔플을 한다.
         num_workers=4,
         pin_memory=True
     )
