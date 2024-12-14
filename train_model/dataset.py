@@ -10,6 +10,7 @@ import torch
 # 기본 한글 폰트를 생성하고나서 .pkl로 만들 때 사용되는 TrainDataProvider 클래스와 다른 역할
 class FontDataset:
     """Enhanced dataset class for font images"""
+    # 객체가 생성될 때 데이터를 불러오고 필요한 변수 선언
     def __init__(
         self,
         data_dir: str,
@@ -132,16 +133,18 @@ class FontDataset:
         except Exception as e:
             print(f"Error in center_and_resize: {e}")
             return np.zeros((self.img_size, self.img_size), dtype=np.float32)
-    
+      
+    # 데이터셋의 샘플 개수를 반환
     def __len__(self) -> int:
         return len(self.data)
     
+    # 데이터셋에 인덱스에 해당되는 샘플을 불러옴옴
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, int]:
         font_id, source_img, target_img = self.data[idx]
         
-        # Convert to tensor
-        # [1(DataLoader 떄문에), 1(gray scale), 128, 128]
-        #  = [batch size, channels, height, width]
+        # 이미지 채널 표시
+        # [1(gray scale), 128, 128]
+        #  = [channels, height, width]
         source_tensor = torch.from_numpy(source_img).unsqueeze(0)
         target_tensor = torch.from_numpy(target_img).unsqueeze(0)
         

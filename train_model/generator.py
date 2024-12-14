@@ -20,7 +20,7 @@ class FontGAN(nn.Module):
         # 모델 구조 초기화
         self.encoder = Encoder(conv_dim=128).to(device)  # 원본 모델과 동일한 구조 유지
         self.decoder = Decoder(
-            embedded_dim=1152,  # 인코더 출력(512) + 임베딩(512) + 3x3 spatial structure
+            embedded_dim=1152,  # 인코더 출력(128 * 8) + 임베딩(128)
             conv_dim=128
         ).to(device)
         self.discriminator = Discriminator(category_num=26).to(device)  # 26개 폰트 유지
@@ -29,7 +29,7 @@ class FontGAN(nn.Module):
         self.g_optimizer = torch.optim.Adam(
             list(self.decoder.parameters()) + list(self.encoder.parameters()),   
             lr=config.lr * 0.5,  # 더 작은 학습률 사용
-            betas=(0.5, 0.999) # 베타?!
+            betas=(0.5, 0.999) # 모멘텀
         )
         self.d_optimizer = torch.optim.Adam(
             self.discriminator.parameters(),
@@ -41,16 +41,6 @@ class FontGAN(nn.Module):
         self.l1_loss = nn.L1Loss().to(device)
         self.bce_loss = nn.BCEWithLogitsLoss().to(device)
         self.mse_loss = nn.MSELoss().to(device)
-
-    def _process_embeddings(self, font_embeddings, font_ids):    
-        # 10번 폰트에 대해서만 그래디언트 계산
-        adjusted_ids = font_ids - 1
-        selected_embeddings = font_embeddings[adjusted_ids]
-        
-        # 10번 폰트가 아닌 경우 그래디언트 차단
-        mask = (font_ids != 10).view(-1, 1, 1, 1)
-        selected_embeddings = selected_embeddings.detach() * mask + selected_embeddings * (~mask)
-        return selected_embeddings
 
     def eval(self):
         """평가 모드로 전환"""
