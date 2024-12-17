@@ -7,37 +7,53 @@ import torch.nn.functional as F
 from pathlib import Path
 from datetime import datetime
 
-
-
+# Optimizer : Optimization(최적화)를 수행하는 알고리즘을 말함.
+#       --> 모델의 가중치와 편향을 업데이트하여 손실함수를 최소화하는 과정을 최적화
+# 수업 시간에서 배웠듯이 SGD, GD, Adam ... 등 여러 알고리즘이 존재
+# 여기선 Adam을 사용, 경사 하강법 알고리즘을 기반으로 현재 그래디언트와 이전 그래디언트을 고려해 가중치 업데이트
 
 class FontGAN(nn.Module):
-    def __init__(self, config: GANConfig, device: torch.device):
+    def __init__(self, config: GANConfig, device: torch.device, fine_tune:bool = False):
         super().__init__()  # 중요: 부모 클래스 초기화
         self.config = config
         self.device = device
         self.train_step_count = 0
         
-        # 모델 구조 초기화
+        # 모델 구조 초기화, 생성자(인코더 + 디코더)와 디코더로 이루어져 있다.
         self.encoder = Encoder(conv_dim=128).to(device)  # 원본 모델과 동일한 구조 유지
         self.decoder = Decoder(
-            embedded_dim=1152,  # 인코더 출력(128 * 8) + 임베딩(128)
+            embedded_dim=1152,  # 인코더 출력(128 * 8 * (3 * 3)) + 임베딩(128 * (3 * 3))
             conv_dim=128
         ).to(device)
-        self.discriminator = Discriminator(category_num=26).to(device)  # 26개 폰트 유지
+        self.discriminator = Discriminator(category_num=26).to(device)  # 26개 폰트(category_num)
         
-        # 전이 학습을 하게될 경우 인코더의 파라미터는 두고 디코더의 파라미터를 들고 와야된다.
-        self.g_optimizer = torch.optim.Adam(
-            list(self.decoder.parameters()) + list(self.encoder.parameters()),   
-            lr=config.lr * 0.5,  # 더 작은 학습률 사용
-            betas=(0.5, 0.999) # 모멘텀
-        )
+        # 전이 학습을 하게될 경우 인코더의 파라미터는 얼리고 디코더의 파라미터를 들고 와야된다
+        if fine_tune:
+            self.g_optimizer = torch.optim.Adam(
+                list(self.decoder.parameters()),   
+                lr=config.lr,
+                # 이전 그래디언트의 이동 평균(첫 번째 매개변수)과 
+                # 그래디언트 제곱의 이동 평균(두 번째 매개변수)에 대한 가중치를 제어
+                betas=(0.5, 0.999)
+            )
+        else:
+            self.g_optimizer = torch.optim.Adam(
+                list(self.decoder.parameters()) + list(self.encoder.parameters()),   
+                lr=config.lr,
+                betas=(0.5, 0.999)
+            )
+        # 판별자의 최적화 함수도 생성자와 동일하다
         self.d_optimizer = torch.optim.Adam(
             self.discriminator.parameters(),
-            lr=config.lr * 0.5,
+            lr=config.lr,
             betas=(0.5, 0.999)
         )
 
-        # Loss functions
+        # 사용될 손실함수 정의, 이 손실함수들을 이용해 새로운 목적함수를 만든다.
+        # L1Loss            : 평균 절대 오차를 계산하는 손실함수
+        # MSELoss           : 평균 제곱 오차(MSE)를 계산하는 손실함수 
+        # BCEwithLogitsLoss : nn.BCELoss에 Sigmoid함수가 포함된 형태여서 따로 활성화함수 사용 X
+        # BCELoss           : 이진 교차 엔트로피(Binary Cross Entropy) 손실 함수, 예측값과 타겟값 사이의 교차 엔트로피 계산
         self.l1_loss = nn.L1Loss().to(device)
         self.bce_loss = nn.BCEWithLogitsLoss().to(device)
         self.mse_loss = nn.MSELoss().to(device)
@@ -49,24 +65,25 @@ class FontGAN(nn.Module):
         self.discriminator.eval()
 
     # 인코더 학습 여부 = mode
-    def train(self, mode=False):
-        if mode:
+    def train(self, fine_tune=False):
+        """학습 모드로 전환"""
+        if fine_tune:
             # 학습 모드에서도 인코더는 eval 모드 유지
             self.encoder.eval()
             self.decoder.train()
             self.discriminator.train()
         else:
-            self.encoder.eval()
-            self.decoder.eval()
-            self.discriminator.eval()
+            self.encoder.train()
+            self.decoder.train()
+            self.discriminator.train()
         return self
 
     def save_samples(self, save_path: str, source: torch.Tensor, 
                     target: torch.Tensor, font_ids: torch.Tensor,
                     font_embeddings: torch.Tensor, num_samples: int = 8):
-        """학습 중인 모델의 샘플 이미지를 생성하고 저장합니다.
+        """학습 중인 모델의 샘플 이미지를 생성하고 저장하는 함수
         
-        이 함수는 세 가지 이미지를 나란히 저장합니다:
+        이 함수는 세 가지 이미지를 가로로 저장
         1. 원본 고딕체 이미지 (source)
         2. 실제 타겟 손글씨 이미지 (target)
         3. 모델이 생성한 가짜 손글씨 이미지 (fake)
@@ -137,6 +154,15 @@ class FontGAN(nn.Module):
                 self.train()
         
     def train_step(self, real_source, real_target, font_embeddings, font_ids):
+        """배치별 학습을 진행하는 함수
+        1. 
+        
+        Args:
+            real_source (torch.Tensor): 원본 고딕체 이미지 배치
+            real_target (torch.Tensor): 실제 손글씨 이미지 배치
+            font_ids (torch.Tensor): 폰트 ID 배치
+            font_embeddings (torch.Tensor): 전체 폰트 임베딩
+        """
         # 학습 단계에 따른 가중치 설정
         if self.train_step_count < self.config.stage_transition_step:
             l1_lambda = self.config.stage1_l1_lambda
@@ -145,17 +171,19 @@ class FontGAN(nn.Module):
             l1_lambda = self.config.stage2_l1_lambda
             const_lambda = self.config.stage2_const_lambda
     
-        
-        # Move data to device
+        # 설정된 디바이스로 텐서를 옮긴다
         real_source = real_source.to(self.device)
         real_target = real_target.to(self.device)
         font_embeddings = font_embeddings.to(self.device)
         font_ids = font_ids.to(self.device)
         
-        # Generate fake image
+        # 인코더에 고딕체 이미지를 입력 -> 글자 특징 백터와 손실된 차원에 대한 백터 출력
         encoded_source, skip_connections = self.encoder(real_source)
+        # font_ids
         embedding = self._get_embeddings(font_embeddings, font_ids)
+
         embedded = torch.cat([encoded_source, embedding], dim=1)
+
         fake_target = self.decoder(embedded, skip_connections)
         
         # Train Discriminator
@@ -167,10 +195,10 @@ class FontGAN(nn.Module):
             torch.cat([real_source, fake_target.detach()], dim=1)
         )
         
-        # torch.ones_like : 인풋과 동일한 크기를 가지면서 각각의 원소가 1인 텐서 생성
+        # torch.ones_like : input과 동일한 크기를 가지면서 각각의 원소가 1인 텐서 생성
+        # torch.zeros_like : input과 동일한 크기를 가지면서 각각의 원소가 0인 텐서 생성
 
         # Label smoothing
-        # 각자 다르게 
         real_labels = torch.ones_like(d_real_patch).to(self.device) * 0.9
         fake_labels = torch.zeros_like(d_fake_patch).to(self.device) * 0.1
         
@@ -215,10 +243,10 @@ class FontGAN(nn.Module):
             'cat_loss': g_loss_cat.item()
         }
     
-            
+    # 임베딩 객체 획득
     def _get_embeddings(self, embeddings: torch.Tensor, ids: torch.Tensor) -> torch.Tensor:
         adjusted_ids = ids - 1
-        selected = embeddings[adjusted_ids]  # 이미 [batch_size, 128, 3, 3] 형태
+        selected = embeddings[adjusted_ids]  # [batch_size, 128, 3, 3] 형태
         return selected  # 추가 변환 필요 없음
 
         
@@ -233,7 +261,7 @@ class FontGAN(nn.Module):
         return (real_loss + fake_loss) * 0.5
     
     def _consistency_loss(self, encoded_source: torch.Tensor, fake_target: torch.Tensor) -> torch.Tensor:
-        """Calculate consistency loss between encoded source and encoded fake"""
+        """const 손실 함수"""
         # Encode the generated image
         encoded_fake, _ = self.encoder(fake_target)
         return self.mse_loss(encoded_source, encoded_fake)
@@ -350,8 +378,3 @@ class FontGAN(nn.Module):
                     font_id,
                     font_embeddings
                 )
-
-    # ################################### ################################### ################################### #
-    # 이미지에 점자 모양 노이즈가 생기는 원인에 대해 클로드한테 질문해본 결과
-    # L1 손실과 적대적 손실(adversarial loss) 사이의 균형 문제 (L1 손실은 픽셀 단위의 차이를 줄이려고 하는 반면 적대적 손실은 전체적인 스타일의 사실성을 높이려고함)
-    # skip connection을 통한 특징 전달 과정에서 발생하는 문제

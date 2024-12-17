@@ -162,11 +162,12 @@ def train_font_gan(config: GANConfig, data_dir: str, save_dir: str, device: torc
         writer.writerow(['epoch', 'l1_loss', 'const_loss', 'discriminator_acc', 'font_classification_acc'])
 
     # 학습률 스케줄러 설정
+    # StepLR : step_size를 지정하여 step마다 learngin rate를 gamma씩 감소하는 스케줄러  
     schedulers = {
         'generator': torch.optim.lr_scheduler.StepLR(
             gan.g_optimizer,
             step_size=config.schedule,
-            gamma=0.5  # 학습률을 절반으로 감소
+            gamma=0.5  # 기존 학습률에 x 0.5
         ),
         'discriminator': torch.optim.lr_scheduler.StepLR(
             gan.d_optimizer,
@@ -176,7 +177,7 @@ def train_font_gan(config: GANConfig, data_dir: str, save_dir: str, device: torc
     }
 
     # 본격적인 학습 시작. 
-    # cofig 설정에 따라 에포크가 결정됨 배치는 당연히 배치 사이지에 따라 바뀜ㄴ
+    # cofig 설정에 따라 에포크가 결정됨 배치는 당연히 배치 사이지에 따라 바뀜
     for epoch in range(start_epoch, start_epoch + config.max_epoch):
         print(f"\n=== Epoch {epoch+1}/{config.max_epoch + start_epoch} ===")
         epoch_losses = {
@@ -189,7 +190,7 @@ def train_font_gan(config: GANConfig, data_dir: str, save_dir: str, device: torc
         
         # train_loader를 통해 인덱스별로 (원본이미지, 타겟이미지, 폰트 식별 번호)를 추출함
         for batch_idx, (source, target, font_ids) in enumerate(train_loader):
-            # 생성자 학습
+            # 생성자 학습 -> 배치단위로 학습을 진행한다.
             losses = gan.train_step(source, target, font_embeddings, font_ids)
                 
             for k, v in losses.items():
@@ -291,7 +292,7 @@ def main():
     checkpoint_path = "./final_data/checkpoints/best_model.pth"  # 이전 체크포인트 경로
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Generate embeddings if needed
+    # 임베딩 벡터가 없으면 새롭게 생성한다, 임베딩 벡터에 대해 자세한 내용은 함수의 주석으로 확인 가능
     if not (Path("./fixed_dir") / "EMBEDDINGS.pkl").exists():
         print("새로운 임베딩 생성")
         generate_font_embeddings(GANConfig.fonts_num, GANConfig.embedding_dim)

@@ -14,7 +14,7 @@ class GANConfig:
     
     # 학습 관련 설정
     max_epoch: int = 200
-    schedule: int = 20
+    schedule: int = 10
     lr: float = 0.0001
     beta1: float = 0.5
     beta2: float = 0.999
@@ -28,7 +28,7 @@ class GANConfig:
     stage2_l1_lambda: float = 50.0       # 감소
     stage2_const_lambda: float = 30.0    # 감소
 
-        # Adversarial loss 가중치 추가
+    # Adversarial loss 가중치 추가
     lambda_adv: float = 0.5
     lambda_cat: float = 0.1
     
