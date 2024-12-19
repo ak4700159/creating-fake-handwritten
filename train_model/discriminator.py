@@ -11,8 +11,7 @@ class Discriminator(nn.Module):
             img_dim      : source imgae(1채널) + target image(1채널)
             disc_dim     : 초기 추출할 채널개수
     """
-    def __init__(self, category_num: int, img_dim: int = 2, disc_dim: int = 64):
-
+    def __init__(self, category_num: int, img_dim: int = 2, disc_dim: int = 128):
         super().__init__()
         
         # 이미지의 특징을 추출하는 레이어 -> features

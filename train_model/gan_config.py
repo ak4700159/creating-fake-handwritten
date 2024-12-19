@@ -9,28 +9,28 @@ class GANConfig:
     img_size: int = 128
     embedding_dim: int = 128
     conv_dim: int = 128
-    batch_size: int = 32
+    batch_size: int = 16
     fonts_num: int = 26
     
     # 학습 관련 설정
     max_epoch: int = 200
     schedule: int = 10
-    lr: float = 0.0001
+    lr: float = 0.0002
     beta1: float = 0.5
     beta2: float = 0.999
     
     # 손실함수 가중치
     # Stage 1 (초기 학습)
-    stage1_l1_lambda: float = 100.0      # 감소
-    stage1_const_lambda: float = 5.0     # 감소
+    stage1_l1_lambda: float = 200.0     
+    stage1_const_lambda: float = 10.0   
     
     # Stage 2 (후기 학습)
-    stage2_l1_lambda: float = 50.0       # 감소
-    stage2_const_lambda: float = 30.0    # 감소
+    stage2_l1_lambda: float = 100.0   
+    stage2_const_lambda: float = 30.0   
 
     # Adversarial loss 가중치 추가
-    lambda_adv: float = 0.5
-    lambda_cat: float = 0.1
+    lambda_adv: float = 1.0
+    lambda_cat: float = 0.5
     
     # Stage 전환 기준
     stage_transition_step: int = 30000  # Stage 1 -> 2 전환 시점
