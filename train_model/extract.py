@@ -139,7 +139,7 @@ def generate_and_evaluate_characters(model, config, device, save_dir: str):
     학습되지 않은 문자들에 대해 고딕체 이미지를 생성하고, 이를 기반으로 손글씨 스타일로 변환합니다.
     """
     # 학습에 사용되지 않은 새로운 문자 선택
-    test_chars = ['한', '글', '만', '들', '기', '정', '말', '재', '미', '있']
+    test_chars = ['한', '글', '만', '들', '기', '정', '말', '재', '미', '있', '다']
     
     # 폰트 경로 설정
     font_path = "./get_data/fonts/source/source_font.ttf"
@@ -166,10 +166,10 @@ def generate_and_evaluate_characters(model, config, device, save_dir: str):
                 encoded_source, skip_connections = model.encoder(source_image.unsqueeze(0))
                 
                 # 노이즈 제거 적용
-                skip_connections = model._enhanced_denoising(skip_connections)
+                # skip_connections = model._enhanced_denoising(skip_connections)
                 
                 # 임베딩 처리
-                font_id = torch.tensor([1], device=device)  # 타겟 폰트 ID (10번 폰트 스타일)
+                font_id = torch.tensor([10], device=device)  # 타겟 폰트 ID (10번 폰트 스타일)
                 embedding = model._get_embeddings(font_embeddings, font_id)
                 embedded = torch.cat([encoded_source, embedding], dim=1)
                 
@@ -177,34 +177,20 @@ def generate_and_evaluate_characters(model, config, device, save_dir: str):
                 fake_target = model.decoder(embedded, skip_connections)
                 
                 # 후처리 및 노이즈 제거
-                enhanced_image = model._post_process_image(fake_target)
+                # enhanced_image = model._post_process_image(fake_target)
                 
                 # 결과 저장을 위한 이미지 준비
                 source = (source_image.unsqueeze(0) + 1) / 2
-                generated = (enhanced_image + 1) / 2
+                generated = (fake_target + 1) / 2
                 
                 # 비교 이미지 생성 (원본 고딕체 | 생성된 손글씨)
                 comparison = torch.cat([source, generated], dim=3)
                 
                 # 결과 저장
-                save_path = save_dir / f'generated_{char}_{idx+1}.png'
+                save_path = save_dir / f'{char}_{idx+1}.png'
                 save_image(comparison, save_path, normalize=False)
                 
                 print(f"생성 완료: {char} -> {save_path}")
-                
-            # 전체 결과 시각화
-            plt.figure(figsize=(20, 4))
-            for idx, char in enumerate(test_chars):
-                plt.subplot(2, 5, idx+1)
-                img_path = save_dir / f'generated_{char}_{idx+1}.png'
-                img = Image.open(img_path)
-                plt.imshow(np.array(img), cmap='gray')
-                plt.title(f'Character: {char}')
-                plt.axis('off')
-            
-            plt.tight_layout()
-            plt.savefig(save_dir / 'all_results.png')
-            plt.close()
             
     except Exception as e:
         print(f"생성 과정에서 오류 발생: {str(e)}")
@@ -217,13 +203,7 @@ def main():
     메인 실행 함수입니다. 모델을 로드하고 새로운 문자 생성을 실행합니다.
     """
     # 설정 초기화
-    config = GANConfig(
-        img_size=128,
-        embedding_dim=128,
-        conv_dim=128,
-        batch_size=1,
-        fonts_num=26
-    )
+    config = GANConfig()
     
     # GPU 사용 가능 여부 확인
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
