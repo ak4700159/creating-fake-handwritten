@@ -23,8 +23,6 @@ def resume_training(checkpoint_path: str, config: GANConfig, data_dir: str, save
     
     # GAN 모델 초기화
     gan = FontGAN(config, device)
-    # gan.train()  # 명시적으로 학습 모드 설정
-
     try:
         checkpoint = load_checkpoint(checkpoint_path, device)
         

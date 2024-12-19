@@ -42,8 +42,8 @@ class HandwritingPreprocessor:
                 
                 # 이미지 처리 및 저장
                 combined = self._create_combined_image(
-                    self._extract_gothic(original),
-                    self._extract_handwriting(original)
+                    self._extract_handwriting(original),
+                    self._extract_gothic(original)
                 )
                 
                 # 저장
