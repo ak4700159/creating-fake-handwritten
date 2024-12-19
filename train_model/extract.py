@@ -14,51 +14,6 @@ from torchvision.utils import save_image
 import matplotlib.pyplot as plt
 
 
-
-def generate_new_characters(self, source_images: torch.Tensor, font_embeddings: torch.Tensor, save_dir: str):
-    """학습에 사용되지 않은 새로운 한글 문자 생성
-    
-    이 함수는 학습 데이터에 없던 문자들을 생성합니다. 특히 다음 사항들을 개선했습니다:
-    1. 노이즈 제거를 위한 향상된 필터링
-    2. 특징 맵의 더 나은 정규화
-    3. 스타일 일관성 강화
-    """
-    # 생성할 문자 선택 (학습 데이터에 없는 문자들)
-    new_chars = [
-        '가', '나', '다', '라', '마',  # 기본 받침 없는 문자
-        '갈', '난', '달', '람', '맘'   # 받침 있는 문자
-    ]
-    
-    self.eval()  # 평가 모드로 전환
-    results = []
-    
-    try:
-        with torch.no_grad():
-            for char in new_chars:
-                # 1. 특징 추출 및 노이즈 제거 강화
-                encoded_source, skip_connections = self.encoder(source_images)
-                
-                # 향상된 노이즈 제거 프로세스
-                skip_connections = self._enhanced_denoising(skip_connections)
-                
-                # 2. 임베딩 처리 및 스타일 강화
-                embedding = self._get_style_enhanced_embedding(font_embeddings)
-                embedded = self._combine_features_with_style(encoded_source, embedding)
-                
-                # 3. 개선된 디코더 처리
-                fake_image = self.decoder(embedded, skip_connections)
-                
-                # 후처리 및 품질 향상
-                enhanced_image = self._post_process_image(fake_image)
-                
-                results.append((char, enhanced_image))
-                
-        # 결과 저장
-        self._save_generated_results(results, save_dir)
-        
-    finally:
-        self.train()  # 학습 모드로 복원
-
 def prepare_source_image(font_path: str, char: str, size: int = 128) -> torch.Tensor:
     """
     TTF 폰트 파일을 사용하여 고딕체 문자 이미지를 생성하고 전처리합니다.
