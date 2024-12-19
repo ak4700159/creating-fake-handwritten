@@ -4,7 +4,7 @@ import torch
 
 class Discriminator(nn.Module):
     """Improved Discriminator with PatchGAN architecture"""
-    def __init__(self, category_num: int, img_dim: int = 2, disc_dim: int = 64):
+    def __init__(self, category_num: int, img_dim: int = 2, disc_dim: int = 128):
         super().__init__()
         
         self.conv_blocks = nn.Sequential(
