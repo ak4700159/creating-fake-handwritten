@@ -217,7 +217,7 @@ class FontGAN(nn.Module):
         
         # Train Generator
         g_fake_score, g_fake_patch, g_fake_cat = self.discriminator(
-            torch.cat([real_source, fake_target], dim=1)
+           torch.cat([real_source, fake_target], dim=1)
         )
         
         # Generator losses
@@ -266,7 +266,7 @@ class FontGAN(nn.Module):
         encoded_fake, _ = self.encoder(fake_target)
         return self.mse_loss(encoded_source, encoded_fake)
 
-    def evaluate_metrics(self, dataloader, font_embeddings):
+    def evaluate_metrics(self, dataer, font_embeddings):
         """모델 성능 평가"""
         self.eval()
         metrics = {
@@ -280,10 +280,10 @@ class FontGAN(nn.Module):
         try:
             with torch.no_grad():
                 # 데이터 로더가 비어있는지 확인
-                if len(dataloader) == 0:
-                    raise ValueError("Dataloader is empty")
+                if len(dataer) == 0:
+                    raise ValueError("Dataer is empty")
                     
-                for batch_idx, (source, target, font_ids) in enumerate(dataloader):
+                for batch_idx, (source, target, font_ids) in enumerate(dataer):
                     if batch_idx >= 100:  # 평가할 배치 수 제한
                         break
                         
@@ -342,7 +342,7 @@ class FontGAN(nn.Module):
         finally:
             self.train()
 
-    def generate_evaluation_samples(self, dataloader, font_embeddings, save_dir: Path):
+    def generate_evaluation_samples(self, dataer, font_embeddings, save_dir: Path):
         self.eval()
         save_dir.mkdir(parents=True, exist_ok=True)
         
@@ -350,7 +350,7 @@ class FontGAN(nn.Module):
         unique_samples = {}
         
         with torch.no_grad():
-            for source, target, font_ids in dataloader:
+            for source, target, font_ids in dataer:
                 for i, font_id in enumerate(font_ids):
                     font_id = font_id.item()
                     if font_id not in unique_samples and len(unique_samples) < 10:
