@@ -107,7 +107,7 @@ class PickledImageProvider(object):
 # 즉, 50,000개의 글자 데이터를 생성 후 가공하는 역할. -> save_fixed_sample를 통해 fixed_source, fixed_label 생성
 # 고정된 평가용 데이터, 훈련용 데이터
 class TrainDataProvider(object):
-    def __init__(self, data_dir, train_name="train.pkl", val_name="val.pkl", \
+    def __init__(self, data_dir, train_name="hand_train.pkl", val_name="val.pkl", \
                  filter_by_font=None, filter_by_charid=None, verbose=True, val=True):
         self.data_dir = data_dir
         self.filter_by_font = filter_by_font

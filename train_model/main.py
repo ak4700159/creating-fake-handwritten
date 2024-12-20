@@ -115,7 +115,7 @@ def train_font_gan(config: GANConfig, data_dir: str, save_dir: str, device: torc
     font_embeddings = load_embeddings(embedding_path, device)
     
     # 학습용 데이터 로더 설정
-    train_dataset = FontDataset(data_dir, "train.pkl", img_size = config.img_size)
+    train_dataset = FontDataset(data_dir, "handwritten_train.pkl", img_size = config.img_size)
     # nun_workers = 데이터를 로드할 때 복수개의 프로세스로 멀티 프로세싱을 수행, CPU가 빠르게 데이터를 로딩해서 GPU의 연산 시간 비율을 높이기 위함.
     # pin_meomeory = 메모리의 데이터를 GPU로 옮길 때 시간을 단축시키기 위함.
     train_loader = DataLoader(
@@ -127,7 +127,7 @@ def train_font_gan(config: GANConfig, data_dir: str, save_dir: str, device: torc
     )
 
     # 평가용 데이터로더 설정
-    val_dataset = FontDataset(data_dir, "val.pkl", img_size = config.img_size)
+    val_dataset = FontDataset(data_dir, "handwritten_val.pkl", img_size = config.img_size)
     val_loader = DataLoader(
         val_dataset,
         batch_size=config.batch_size,
@@ -286,7 +286,7 @@ def train_font_gan(config: GANConfig, data_dir: str, save_dir: str, device: torc
 def main():
     # Paths
     data_dir = "./dataset"
-    save_dir = "./final_data"
+    save_dir = "./pre_trained_data"
     checkpoint_path = "./final_data/checkpoints/best_model.pth"  # 이전 체크포인트 경로
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

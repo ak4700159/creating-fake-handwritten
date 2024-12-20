@@ -44,21 +44,6 @@ def create_handwriting_templates(characters, output_dir, font_path="./fonts/sour
         # 글자를 검은색으로 그리기
         draw.text((x, y), char, fill=(0, 0, 0), font=font)
         
-        # 오른쪽 영역에 격자 그리기
-        mid_x = scaled_size[0]//2
-        # # 가로선
-        # for i in range(0, scaled_size[1] + 1, 64 * scale_factor):
-        #     draw.line([(mid_x, i), (scaled_size[0], i)], 
-        #              fill=(200, 200, 200), width=scale_factor)
-        # # 세로선
-        # for i in range(mid_x, scaled_size[0] + 1, 64 * scale_factor):
-        #     draw.line([(i, 0), (i, scaled_size[1])], 
-        #              fill=(200, 200, 200), width=scale_factor)
-            
-        # # 중앙 구분선
-        # draw.line([(mid_x, 0), (mid_x, scaled_size[1])], 
-        #          fill=(100, 100, 100), width=scale_factor)
-        
         # 이미지 크기를 원래 크기로 줄이기 (안티앨리어싱 적용)
         image = image.resize(target_size, Image.Resampling.LANCZOS)
         

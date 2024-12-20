@@ -42,8 +42,8 @@ class HandwritingPreprocessor:
                 
                 # 이미지 처리 및 저장
                 combined = self._create_combined_image(
-                    self._extract_handwriting(original),
-                    self._extract_gothic(original)
+                    self._extract_gothic(original),
+                    self._extract_handwriting(original)
                 )
                 
                 # 저장
@@ -88,7 +88,7 @@ class HandwritingPreprocessor:
         combined = Image.new('L', (self.img_size * 2, self.img_size), 255)
         
         # 고딕체 붙이기 (왼쪽)
-        combined.paste(gothic, (0, 0))
+        combined.paste(gothic, (self.img_size, 0)) 
         
         # 손글씨 중앙 정렬을 위한 처리
         hw_array = np.array(handwriting)
@@ -104,8 +104,8 @@ class HandwritingPreprocessor:
             # 새로운 크기 계산 (비율 유지)
             content_width = right - left + 1
             content_height = bottom - top + 1
-            ratio = min(self.img_size * 0.8 / content_width, 
-                       self.img_size * 0.8 / content_height)
+            ratio = min(self.img_size * 0.6 / content_width, 
+                       self.img_size * 0.6 / content_height)
             
             new_width = int(content_width * ratio)
             new_height = int(content_height * ratio)
@@ -114,10 +114,10 @@ class HandwritingPreprocessor:
             content = content.resize((new_width, new_height), Image.LANCZOS)
             
             # 중앙 위치 계산
-            paste_x = self.img_size + (self.img_size - new_width) // 2
+            paste_x = (self.img_size - new_width) // 2 
             paste_y = (self.img_size - new_height) // 2
             
-            # 손글씨 붙이기 (오른쪽 중앙)
+            # 손글씨 붙이기 (왼쪽 중앙)
             combined.paste(content, (paste_x, paste_y))
         
         return combined
@@ -138,6 +138,7 @@ def main():
         print(f"처리된 이미지가 {output_dir}에 저장되었습니다.")
     except Exception as e:
         print(f"처리 중 오류가 발생했습니다: {e}")
+
 
 if __name__ == "__main__":
     main()

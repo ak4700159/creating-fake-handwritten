@@ -18,6 +18,7 @@ class FontGAN(nn.Module):
         self.config = config
         self.device = device
         self.train_step_count = 0
+        self.fine_tune = fine_tune
         
         # 모델 구조 초기화, 생성자(인코더 + 디코더)와 디코더로 이루어져 있다.
         self.encoder = Encoder(conv_dim=128).to(device)  # 원본 모델과 동일한 구조 유지
@@ -59,22 +60,27 @@ class FontGAN(nn.Module):
         self.mse_loss = nn.MSELoss().to(device)
 
     def _get_embeddings(self, embeddings: torch.Tensor, ids: torch.Tensor) -> torch.Tensor:
-        adjusted_ids = ids - 1               # 폰트 식별 번호로 인덱싱하기 위해 0부터 시작
-        selected = embeddings[adjusted_ids]  # [batch_size, 128, 3, 3] 형태
-        return selected                      # 추가 변환 필요 없음
-    
-    def _adversial_loss(self, d_real_patch: torch.Tensor, d_fake_patch: torch.Tensor) -> torch.Tensor:
+        """폰트 임베딩을 가져오는 함수
+        
+        Args:
+            embeddings: [num_fonts, channels, height, width] 형태의 텐서
+            ids: [batch_size, 1] 형태의 텐서
+            
+        Returns:
+            [batch_size, channels, height, width] 형태의 텐서
         """
-            adv loss = 판별자가 생성된 가짜 이미지와 원본 target이미지를 판단하는 손실값
-            판별자는 가짜 이미지는 0에 가깝게 target 이미지는 1에 가깝게 학습
-
-            Label smoothing을 통해 모델의 과잉 확신을 방지하고 라벨 간 클러스터링이 더욱 밀집된 결과를 얻을 수 있게됨
-        """
-        real_labels = torch.ones_like(d_real_patch).to(self.device) * 0.9
-        fake_labels = torch.zeros_like(d_fake_patch).to(self.device) * 0.1
-        d_loss_real = self.bce_loss(d_real_patch, real_labels)
-        d_loss_fake = self.bce_loss(d_fake_patch, fake_labels)
-        return (d_loss_real + d_loss_fake) * 0.5
+        ids = ids.long()
+        adjusted_ids = ids.squeeze(-1) - 1  # 마지막 차원 제거
+        selected = embeddings[adjusted_ids]  # 인덱싱
+        
+        # 차원 확인 및 필요한 경우 조정
+        if selected.dim() > 4:
+            selected = selected.squeeze(1)
+        
+        # 배치 차원이 없는 경우 추가
+        if selected.dim() == 3:
+            selected = selected.unsqueeze(0)
+        return selected * 2.0
     
     def _consistency_loss(self, encoded_source: torch.Tensor, fake_target: torch.Tensor) -> torch.Tensor:
         """
@@ -93,9 +99,9 @@ class FontGAN(nn.Module):
         self.discriminator.eval()
 
     # 인코더 학습 여부 = mode
-    def train(self, fine_tune=False):
+    def train(self):
         """학습 모드로 전환"""
-        if fine_tune:
+        if self.fine_tune:
             # 학습 모드에서도 인코더는 eval 모드 유지
             self.encoder.eval()
             self.decoder.train()
@@ -133,15 +139,11 @@ class FontGAN(nn.Module):
         try:
             with torch.no_grad():  # 메모리 효율성을 위해 그래디언트 계산 비활성화
                 # 배치 크기 제한
-                source = source[:num_samples]
-                target = target[:num_samples]
-                font_ids = font_ids[:num_samples]
-                
-                # 가짜 이미지 생성 과정
+                source = source[:num_samples].to(self.device)
+                target = target[:num_samples].to(self.device)
+                font_ids = font_ids[:num_samples].to(self.device)
+                        
                 encoded_source, skip_connections = self.encoder(source)
-    
-                
-                # 폰트 임베딩 처리
                 embedding = self._get_embeddings(font_embeddings, font_ids)
                 embedded = torch.cat([encoded_source, embedding], dim=1)
                 
@@ -180,7 +182,21 @@ class FontGAN(nn.Module):
             # 이전 학습/평가 모드로 복원
             if was_training:
                 self.train()
-        
+    
+
+    def _adversial_loss(self, d_real_patch: torch.Tensor, d_fake_patch: torch.Tensor) -> torch.Tensor:
+        """
+            adv loss = 판별자가 생성된 가짜 이미지와 원본 target이미지를 판단하는 손실값
+            판별자는 가짜 이미지는 0에 가깝게 target 이미지는 1에 가깝게 학습
+
+            Label smoothing을 통해 모델의 과잉 확신을 방지하고 라벨 간 클러스터링이 더욱 밀집된 결과를 얻을 수 있게됨
+        """
+        real_labels = torch.ones_like(d_real_patch).to(self.device) * 0.9
+        fake_labels = torch.zeros_like(d_fake_patch).to(self.device) * 0.1
+        d_loss_real = self.bce_loss(d_real_patch, real_labels)
+        d_loss_fake = self.bce_loss(d_fake_patch, fake_labels)
+        return (d_loss_real + d_loss_fake) * 0.5
+
     def train_step(self, real_source, real_target, font_embeddings, font_ids):
         """배치별 학습을 진행하는 함수
         
@@ -229,7 +245,7 @@ class FontGAN(nn.Module):
 
         # 판별자의 losses
         # 1) d_loss_adv : 판별자가 제대로 이미지를 분류할 수 있도록 하기위한 손실값, 실제 이미지는 1에 가깝게, 가짜 이미지는 0이 나오도록 학습
-        d_loss_adv = _adversial_loss(d_real_patch, d_fake_patch)
+        d_loss_adv = self._adversial_loss(d_real_patch, d_fake_patch)
         # 2) d_loss_cat : 원본 target 데이터의 카테고리에 대한 손실값, 원본 target 데이터터를 더 잘 분류하기 위함
         d_loss_cat = self.bce_loss(d_real_cat, F.one_hot(font_ids, self.config.fonts_num).float())
         d_total_loss = d_loss_adv + d_loss_cat
@@ -273,11 +289,10 @@ class FontGAN(nn.Module):
             'const_loss': g_loss_const.item(),
             'cat_loss': g_loss_cat.item()
         }
-    
 
     def evaluate_metrics(self, dataer, font_embeddings):
         """모델 성능 평가 함수"""
-        self.eval()
+        self.eval()  
         metrics = {
             'l1_loss': [],
             'const_loss': [],
@@ -363,14 +378,16 @@ class FontGAN(nn.Module):
                     break
             if len(unique_samples) == 10:
                 break
-        
         # 수집된 샘플로 이미지 생성
-        for idx, (font_id, (source, target)) in enumerate(unique_samples.items()):
-            # save_samples 함수에서 모델을 통해 이미지 생성
-            self.save_samples(
-                save_dir / f'eval_sample_font_{font_id.item()}.png',
-                source,
-                target,
-                font_id,
-                font_embeddings
-            )
+        with torch.no_grad():
+            for idx, (font_id, (source, target)) in enumerate(unique_samples.items()):
+                # 배치 차원을 유지하면서 텐서 생성
+                if type(font_id) is int : font_id_tensor = torch.tensor([[font_id]], device=self.device).long()
+                
+                self.save_samples(
+                    save_dir / f'eval_sample_font_{font_id}.png',
+                    source,
+                    target,
+                    font_id_tensor,
+                    font_embeddings
+                )

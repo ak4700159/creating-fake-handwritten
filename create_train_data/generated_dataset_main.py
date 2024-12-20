@@ -19,11 +19,7 @@ MAX_RAMDOM_SELECTED_WORD = 2000
 # val_path = "../dataset/val"
 # train_val_split = 트레인 데이터와 평가 데이터의 비율을 의미
 # with_charid = 제목에 char_id가 표시되어 있는지
-def pickle_examples(from_dir, train_path, val_path, train_val_split=0.0, with_charid=False):
-    """
-    Compile a list of examples into pickled format, so during
-    the training, all io will happen in memory
-    """
+def pickle_examples(from_dir, train_path, val_path, train_val_split=0.2, with_charid=False):
     paths = glob.glob(os.path.join(from_dir, "*.png"))
     with open(train_path, 'wb') as ft:
         with open(val_path, 'wb') as fv:
@@ -144,5 +140,5 @@ def main():
 if __name__ == "__main__":
     # main()
     # 생성한 학습용 데이터를 train / value 데이터로 나눈다 (4:1) --> .pkl 파일에 저장
-    pickle_examples('./handwritten_result', '../dataset/handwritten_train.pkl', '../dataset/handwritten_val.pkl', with_charid=True)
+    pickle_examples('../process_handwritten/handwritten_result', '../train_model/dataset/handwritten_train.pkl', '../train_model/dataset/handwritten_val.pkl', with_charid=True)
 
