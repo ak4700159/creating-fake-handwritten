@@ -51,7 +51,7 @@ class FontDataset:
                             img_data = example[-1]  # 마지막 요소가 이미지 데이터
                             
                             # 이미지 처리
-                            source_img, target_img = self._process_image_pair(img_data)
+                            source_img, target_img = self._load_image_pair(img_data)
                             processed_data.append((font_id, source_img, target_img))
                             
                     except EOFError:
@@ -69,7 +69,7 @@ class FontDataset:
         print(f"Loaded {len(processed_data)} samples")
         return processed_data
 
-    def _process_image_pair(self, img_data: bytes) -> Tuple[np.ndarray, np.ndarray]:
+    def _load_image_pair(self, img_data: bytes) -> Tuple[np.ndarray, np.ndarray]:
         """Process a pair of source and target images"""
         try:
             # Convert bytes to PIL Image
@@ -81,10 +81,6 @@ class FontDataset:
             target_img = img_array[:, :w//2]  
             source_img = img_array[:, w//2:] 
             
-            # Center and resize images
-            source_img = self._center_and_resize(source_img)
-            target_img = self._center_and_resize(target_img)
-            
             return source_img, target_img
             
         except Exception as e:
@@ -92,47 +88,6 @@ class FontDataset:
             # 오류 발생시 기본 이미지 반환
             blank = np.zeros((self.img_size, self.img_size), dtype=np.float32)
             return blank, blank
-
-    def _center_and_resize(self, img: np.ndarray) -> np.ndarray:
-        """Center and resize image with error handling"""
-        try:
-            # Convert to PIL Image for processing
-            if isinstance(img, np.ndarray):
-                img = Image.fromarray(img.astype(np.uint8))
-                
-            # Get dimensions
-            w, h = img.size
-            
-            # Calculate new dimensions
-            if h > w:
-                new_h = self.resize_fix
-                new_w = int(w * (new_h / h))
-            else:
-                new_w = self.resize_fix
-                new_h = int(h * (new_w / w))
-                
-            # Resize
-            resized = img.resize((new_w, new_h), Image.LANCZOS)
-            
-            # Create blank canvas
-            new_img = Image.new('L', (self.img_size, self.img_size), 255)
-            
-            # Calculate paste position
-            paste_x = (self.img_size - new_w) // 2
-            paste_y = (self.img_size - new_h) // 2
-            
-            # Paste resized image
-            new_img.paste(resized, (paste_x, paste_y))
-            
-            # Convert to numpy and normalize
-            result = np.array(new_img, dtype=np.float32)
-            result = (result / 127.5) - 1.0
-            
-            return result
-            
-        except Exception as e:
-            print(f"Error in center_and_resize: {e}")
-            return np.zeros((self.img_size, self.img_size), dtype=np.float32)
       
     # 데이터셋의 샘플 개수를 반환
     def __len__(self) -> int:

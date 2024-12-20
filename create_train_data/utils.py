@@ -2,21 +2,14 @@
 from __future__ import print_function
 from __future__ import absolute_import
 
-import os
-import glob
-
-import imageio
-import scipy.misc as misc
+import scipy.misc
 import numpy as np
 from io import BytesIO
 from PIL import Image
-# from scipy.misc import imresize
 
 import matplotlib.pyplot as plt
 
-# 배치 크기에 맞춰 데이터를 채우는(padding) 코드
 def pad_seq(seq, batch_size):
-    # pad the sequence to be the multiples of batch_size
     seq_len = len(seq)
     if seq_len % batch_size == 0:
         return seq
@@ -31,21 +24,22 @@ def bytes_to_file(bytes_img):
 
 def normalize_image(img):
     """
-    Make image zero centered and in between (-1, 1)
+        이미지의 형태는 [W,H,C]
+
+        각 픽셀의 값은 0 ~ 255 까지의 값을 가진다 -> -1 ~ 1 사이의 값을 가지도록 변환
+
+        이는 나중에 활성화 함수에서 최적으로 작동된다.
     """
     normalized = (img / 127.5) - 1.
     return normalized
 
 
-def denorm_image(x):
-    out = (x + 1) / 2
-    return out.clamp(0, 1)
-
-
 def read_split_image(img):
     """"
         타겟이미지와 소스이미지를 나눈다.
+
         [h=128 * w=256] 이미지 파일을 반으로 갈라서 반환
+
         왼쪽이 source(고딕체글자), 오른쪽이 target(폰트별 글자)
     """
     mat = np.array(Image.open(img)).astype(np.float32)
@@ -65,118 +59,91 @@ def shift_and_resize_image(img, shift_x, shift_y, nw, nh):
         img_pil = Image.fromarray(img)
     else:
         img_pil = img
+    # 이미지를 쉬프트하고 다시 원본 크기 만큼 잘라내어 반환.
     enlarged = np.array(img_pil.resize((nh, nw), Image.Resampling.LANCZOS))
     return enlarged[shift_x:shift_x + w, shift_y:shift_y + h]
-
-
-def scale_back(images):
-    return (images + 1.) / 2.
-
-
-def merge(images, size):
-    h, w = images.shape[1], images.shape[2]
-    img = np.zeros((h * size[0], w * size[1], 3))
-    for idx, image in enumerate(images):
-        i = idx % size[1]
-        j = idx // size[1]
-        img[j * h:j * h + h, i * w:i * w + w, :] = image
-
-    return img
-
-
-def save_concat_images(imgs, img_path):
-    concated = np.concatenate(imgs, axis=1)
-    misc.imsave(img_path, concated)
-
-
-def save_gif(gif_path, image_path, file_name):
-    filenames = sorted(glob.glob(os.path.join(image_path, "*.png")))
-    images = []
-    for filename in filenames:
-        images.append(imageio.imread(filename))
-    imageio.mimsave(os.path.join(gif_path, file_name), images)
-
-
-def show_comparison(font_num, real_targets, fake_targets, show_num=8):
-    plt.figure(figsize=(14, show_num//2+1))
-    for idx in range(show_num):
-        plt.subplot(show_num//4, 8, 2*idx+1)
-        plt.imshow(real_targets[font_num][idx].reshape(128, 128), cmap='gray')
-        plt.title("Real [%d]" % font_num)
-        plt.axis('off')
-
-        plt.subplot(show_num//4, 8, 2*idx+2)
-        plt.imshow(fake_targets[font_num][idx].reshape(128, 128), cmap='gray')
-        plt.title("Fake [%d]" % font_num)
-        plt.axis('off')
-    plt.show()
-    
+  
     
 def tight_crop_image(img, verbose=False, resize_fix=False):
+    """
+        해당 함수에선 이미지에 대해 shift resize 
+    """
+    # 입력 이미지의 높이를 가져옴 (정사각형 이미지 가정)
     img_size = img.shape[0]
+
+    # 전체 흰색 값을 img_size로 설정
     full_white = img_size
+
+    # axis=0은 열 방향으로 합을 계산
+    # full_white - np.sum(img, axis=0)는 각 열의 '비어있는 정도'를 계산
+    # np.where는 조건이 참인 인덱스를 반환
     col_sum = np.where(full_white - np.sum(img, axis=0) > 1)
+
+    # axis=1은 행 방향으로 합을 계산
+    # 각 행의 '비어있는 정도'를 계산
     row_sum = np.where(full_white - np.sum(img, axis=1) > 1)
+
+    # 행 방향의 첫 번째와 마지막 비어있지 않은 픽셀의 인덱스
     y1, y2 = row_sum[0][0], row_sum[0][-1]
+
+    # 열 방향의 첫 번째와 마지막 비어있지 않은 픽셀의 인덱스
     x1, x2 = col_sum[0][0], col_sum[0][-1]
+
+    # 실제 글자 부분만 잘라냄
     cropped_image = img[y1:y2, x1:x2]
+
+    # 잘라낸 이미지의 크기 저장
     cropped_image_size = cropped_image.shape
-    
-    if verbose:
-        print('(left x1, top y1):', (x1, y1))
-        print('(right x2, bottom y2):', (x2, y2))
-        print('cropped_image size:', cropped_image_size)
-        
+
+    # resize_fix가 정수인 경우
     if type(resize_fix) == int:
         origin_h, origin_w = cropped_image.shape
+        
+        # 높이가 너비보다 큰 경우
         if origin_h > origin_w:
+            # 비율을 유지하면서 높이를 resize_fix로 조정
             resize_w = int(origin_w * (resize_fix / origin_h))
             resize_h = resize_fix
         else:
+            # 비율을 유지하면서 너비를 resize_fix로 조정
             resize_h = int(origin_h * (resize_fix / origin_w))
             resize_w = resize_fix
-        if verbose:
-            print('resize_h:', resize_h)
-            print('resize_w:', resize_w, \
-                  '[origin_w %d / origin_h %d * target_h %d]' % (origin_w, origin_h, target_h))
-        
-        # resize
+
+        # numpy 배열을 PIL Image로 변환
         if isinstance(cropped_image, np.ndarray):
-            # numpy 배열을 PIL Image로 변환
             img_pil = Image.fromarray(cropped_image.astype(np.uint8))
         else:
             img_pil = cropped_image
+            
+        # 이미지 크기 조정 후 다시 numpy 배열로 변환
         cropped_image = np.array(img_pil.resize((resize_w, resize_h), Image.Resampling.LANCZOS))
+        # 정규화 (-1 ~ 1 범위로 변환)
         cropped_image = normalize_image(cropped_image)
         cropped_image_size = cropped_image.shape
-        if verbose:
-            print('resized_image size:', cropped_image_size)
-        
+
+    # resize_fix가 실수인 경우
     elif type(resize_fix) == float:
         origin_h, origin_w = cropped_image.shape
+        # 원본 크기에 resize_fix를 곱해서 새 크기 계산
         resize_h, resize_w = int(origin_h * resize_fix), int(origin_w * resize_fix)
+        
+        # 최대 크기 제한 (120 픽셀)
         if resize_h > 120:
             resize_h = 120
             resize_w = int(resize_w * 120 / resize_h)
         if resize_w > 120:
             resize_w = 120
             resize_h = int(resize_h * 120 / resize_w)
-        if verbose:
-            print('resize_h:', resize_h)
-            print('resize_w:', resize_w)
-        
-        # resize
+
+        # numpy 배열을 PIL Image로 변환하고 크기 조정
         if isinstance(cropped_image, np.ndarray):
-            # numpy 배열을 PIL Image로 변환
             img_pil = Image.fromarray(cropped_image.astype(np.uint8))
         else:
             img_pil = cropped_image
         cropped_image = np.array(img_pil.resize((resize_w, resize_h), Image.Resampling.LANCZOS))
         cropped_image = normalize_image(cropped_image)
         cropped_image_size = cropped_image.shape
-        if verbose:
-            print('resized_image size:', cropped_image_size)
-    
+
     return cropped_image
 
 
@@ -216,7 +183,6 @@ def add_padding(img, image_size=128, verbose=False, pad_value=None):
     
     return img
 
-# 
 def centering_image(img, image_size=128, verbose=False, resize_fix=False, pad_value=None):
     if not pad_value:
         pad_value = img[0][0]
@@ -224,19 +190,6 @@ def centering_image(img, image_size=128, verbose=False, resize_fix=False, pad_va
     centered_image = add_padding(cropped_image, image_size=image_size, verbose=verbose, pad_value=pad_value)
     
     return centered_image
-
-def chars_to_ids(sentence):
-    charset = []
-    # 모든 한글을 넣는다.(unicode -> 한글) 
-    for i in range(0xac00,0xd7a4):
-        charset.append(chr(i))
-
-    fixed_char_ids = []
-    # 내가 적은 한글 글자를 인덱싱하여 넣는다.
-    for char in sentence:
-        fixed_char_ids.append(charset.index(char))
-        
-    return fixed_char_ids
 
 
 def round_function(i):
