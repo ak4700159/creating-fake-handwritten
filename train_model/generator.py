@@ -59,9 +59,11 @@ class FontGAN(nn.Module):
         self.mse_loss = nn.MSELoss().to(device)
 
     def _get_embeddings(self, embeddings: torch.Tensor, ids: torch.Tensor) -> torch.Tensor:
+        # adjusted_ids.shape = [batch_size]  # 예: [16]
+        # 모든 값이 4 -> 데이터가 전부 5번 폰트일 때 : tensor([4, 4, 4, ..., 4])
         adjusted_ids = ids - 1               # 폰트 식별 번호로 인덱싱하기 위해 0부터 시작
         selected = embeddings[adjusted_ids]  # [batch_size, 128, 3, 3] 형태
-        return selected                      # 추가 변환 필요 없음
+        return selected                   
     
     def _adversial_loss(self, d_real_patch: torch.Tensor, d_fake_patch: torch.Tensor) -> torch.Tensor:
         """
