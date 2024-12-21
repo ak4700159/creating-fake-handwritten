@@ -2,10 +2,9 @@ from layer import ConvBlock
 import torch.nn as nn
 import torch
 
-# 판변자의 역할은 
 class Discriminator(nn.Module):
     """
-        판별자의 목적은 생성자가 생성한 가짜 내 손글씨 데이터를 가짜로 판단하도록 학습하는 것이 목적.:W 
+        판별자의 목적은 생성자가 생성한 가짜 내 손글씨 데이터를 가짜로 판단하도록 학습하는 것이 목적
         Args:
             category_num : 폰트 개수
             img_dim      : source imgae(1채널) + target image(1채널)

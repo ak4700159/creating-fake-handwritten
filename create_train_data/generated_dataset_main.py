@@ -19,7 +19,7 @@ MAX_RAMDOM_SELECTED_WORD = 2000
 # val_path = "../dataset/val"
 # train_val_split = 트레인 데이터와 평가 데이터의 비율을 의미
 # with_charid = 제목에 char_id가 표시되어 있는지
-def pickle_examples(from_dir, train_path, val_path, train_val_split=0.2, with_charid=False):
+def pickle_examples(from_dir, train_path, val_path, train_val_split=0.05, with_charid=False):
     paths = glob.glob(os.path.join(from_dir, "*.png"))
     with open(train_path, 'wb') as ft:
         with open(val_path, 'wb') as fv:

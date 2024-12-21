@@ -69,7 +69,6 @@ class FontGAN(nn.Module):
         Returns:
             [batch_size, channels, height, width] 형태의 텐서
         """
-        ids = ids.long()
         adjusted_ids = ids.squeeze(-1) - 1  # 마지막 차원 제거
         selected = embeddings[adjusted_ids]  # 인덱싱
         
@@ -360,32 +359,64 @@ class FontGAN(nn.Module):
         finally:
             self.train()
 
-    def generate_evaluation_samples(self, val_loader, font_embeddings, save_dir: Path):
+    def generate_evaluation_samples(self, val_loader, font_embeddings, save_dir: Path, epoch: int):
         self.eval()
         save_dir.mkdir(parents=True, exist_ok=True)
         
-        # 전체 데이터셋에서 서로 다른 폰트를 가진 샘플 수집
+        # 폰트 ID별로 샘플을 수집할 딕셔너리
         unique_samples = {}
-        # 평가용 데이터셋에서 배치 사이즈만큼 데이터 추출
+        # 폰트 ID별로 수집된 샘플 개수를 추적
+        sample_counts = {}
+        
         for source, target, font_ids in val_loader:
-            # 
             for i, font_id in enumerate(font_ids):
                 font_id = font_id.item()
-                if font_id not in unique_samples and len(unique_samples) < self.config.eval_fonts:
-                    unique_samples[font_id] = (source[i:i+self.config.eval_samples], target[i:i+self.config.eval_samples])
-                if len(unique_samples) == self.config.eval_fonts:
+                
+                # 아직 충분한 폰트 종류를 수집하지 않았고, 현재 폰트의 샘플이 필요한 경우
+                if len(unique_samples) < self.config.eval_fonts or \
+                (font_id in sample_counts and sample_counts[font_id] < self.config.eval_samples):
+                    
+                    # 새로운 폰트 ID 초기화
+                    if font_id not in unique_samples:
+                        unique_samples[font_id] = {
+                            'sources': [],
+                            'targets': []
+                        }
+                        sample_counts[font_id] = 0
+                    
+                    # 필요한 샘플 수에 도달하지 않은 경우에만 샘플 추가
+                    if sample_counts[font_id] < self.config.eval_samples:
+                        unique_samples[font_id]['sources'].append(source[i:i+1])
+                        unique_samples[font_id]['targets'].append(target[i:i+1])
+                        sample_counts[font_id] += 1
+                
+                # 모든 폰트에 대해 충분한 샘플을 수집했는지 확인
+                if len(unique_samples) == self.config.eval_fonts and \
+                all(count >= self.config.eval_samples for count in sample_counts.values()):
                     break
-            if len(unique_samples) == self.config.eval_fonts:
+                    
+            # 모든 필요한 샘플을 수집했으면 반복 중단
+            if len(unique_samples) == self.config.eval_fonts and \
+            all(count >= self.config.eval_samples for count in sample_counts.values()):
                 break
+        
         # 수집된 샘플로 이미지 생성
         with torch.no_grad():
-            for idx, (font_id, (source, target)) in enumerate(unique_samples.items()):
-                # 배치 차원을 유지하면서 텐서 생성
-                if type(font_id) is int : font_id_tensor = torch.tensor([font_id], device=self.device).long()
-                self.save_samples(
-                    save_dir / f'eval_sample_font_{font_id}.png',
-                    source,
-                    target,
-                    font_id_tensor,
-                    font_embeddings
-                )
+            for font_id, samples in unique_samples.items():
+                try:
+                    # 수집된 샘플들을 하나의 텐서로 결합
+                    sources = torch.cat(samples['sources'], dim=0)
+                    targets = torch.cat(samples['targets'], dim=0)
+                    font_id_tensor = torch.tensor([font_id] * len(samples['sources']), 
+                                            device=self.device).long()
+                    
+                    self.save_samples(
+                        save_dir / f'eval_sample_font_{epoch}.png',
+                        sources,
+                        targets,
+                        font_id_tensor,
+                        font_embeddings
+                    )
+                except Exception as e:
+                    print(f"Font {font_id} 샘플 저장 실패: {e}")
+                    print(f"상세 에러: {str(e)}")
