@@ -7,9 +7,7 @@ from io import BytesIO
 import torch
 
 # 해당 클래스는 .pkl 파일에 있는 데이터 로딩 역할
-# 기본 한글 폰트를 생성하고나서 .pkl로 만들 때 사용되는 TrainDataProvider 클래스와 다른 역할
 class FontDataset:
-    """Enhanced dataset class for font images"""
     # 객체가 생성될 때 데이터를 불러오고 필요한 변수 선언
     def __init__(
         self,
@@ -52,6 +50,9 @@ class FontDataset:
                             
                             # 이미지 처리
                             source_img, target_img = self._load_image_pair(img_data)
+                            # float32로 변환 및 정규화
+                            source_img = (source_img.astype(np.float32) / 127.5) - 1
+                            target_img = (target_img.astype(np.float32) / 127.5) - 1
                             processed_data.append((font_id, source_img, target_img))
                             
                     except EOFError:
@@ -72,7 +73,7 @@ class FontDataset:
     def _load_image_pair(self, img_data: bytes) -> Tuple[np.ndarray, np.ndarray]:
         """Process a pair of source and target images"""
         try:
-            # Convert bytes to PIL Image
+            # 바이너리 형태의 이미지를 이미지 객체로 변환
             img = Image.open(BytesIO(img_data))
             img_array = np.array(img)
             

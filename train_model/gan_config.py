@@ -4,7 +4,6 @@ from torch.serialization import add_safe_globals
 
 @dataclass
 class GANConfig:
-    """Configuration for GAN training"""
     # 기본 설정
     img_size: int = 128
     embedding_dim: int = 128
@@ -32,15 +31,15 @@ class GANConfig:
     cat_lambda: float = 1.2           
     
     # Stage 전환 기준
-    stage_transition_step: int = 30000  # Stage 1 -> 2 전환 시점
+    stage_transition_step: int = 3000  # Stage 1 -> 2 전환 시점
     
     # 학습 진행 관련 설정
     log_step: int = 20
-    eval_step: int = 5
     model_save_step: int = 100
     d_update_freq: int = 1
 
     # 평가 관련 설정
+    eval_step: int = 5
     eval_fonts: int = 1
     eval_samples: int = 8
 

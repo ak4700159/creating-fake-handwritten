@@ -69,6 +69,7 @@ class FontGAN(nn.Module):
         Returns:
             [batch_size, channels, height, width] 형태의 텐서
         """
+        # ids = ids.long() 
         adjusted_ids = ids.squeeze(-1) - 1  # 마지막 차원 제거
         selected = embeddings[adjusted_ids]  # 인덱싱
         
@@ -97,7 +98,6 @@ class FontGAN(nn.Module):
         self.decoder.eval()
         self.discriminator.eval()
 
-    # 인코더 학습 여부 = mode
     def train(self):
         """학습 모드로 전환"""
         if self.fine_tune:
@@ -243,7 +243,7 @@ class FontGAN(nn.Module):
         # 판별자의 losses
         # 1) d_loss_adv : 판별자가 제대로 이미지를 분류할 수 있도록 하기위한 손실값, 실제 이미지는 1에 가깝게, 가짜 이미지는 0이 나오도록 학습
         d_loss_adv = self._adversial_loss(d_real_patch, d_fake_patch)
-        # 2) d_loss_cat : 원본 target 데이터의 카테고리에 대한 손실값, 원본 target 데이터터를 더 잘 분류하기 위함
+        # 2) d_loss_cat : 원본 target 데이터의 카테고리에 대한 손실값, 원본 target 데이터를 더 잘 분류하기 위함
         d_loss_cat = self.bce_loss(d_real_cat, F.one_hot(font_ids, self.config.fonts_num).float())
         d_total_loss = d_loss_adv + d_loss_cat
         
@@ -411,7 +411,7 @@ class FontGAN(nn.Module):
                                             device=self.device).long()
                     
                     self.save_samples(
-                        save_dir / f'eval_sample_font_{epoch}.png',
+                        save_dir / f'eval_sample_font_{epoch + 1}.png',
                         sources,
                         targets,
                         font_id_tensor,

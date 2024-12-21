@@ -1,6 +1,8 @@
 import torch.nn as nn
 import torch
 
+# 인코더, 디코더 관계를 리드미 파일에서 한 눈에 볼 수 있음
+
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=4, stride=2, padding=1, use_bn=True):
         super().__init__()
@@ -35,12 +37,12 @@ class Encoder(nn.Module):
         super().__init__()
         
         # Conv2d 함수 사용 : input channels, output channels, (kernel_size=4, stride=2, padding=1, use_bn=True) 기본값 별도 설정
-        self.conv1 = ConvBlock(img_dim, conv_dim, use_bn=False)      # 128x128 -> 64x64
-        self.conv2 = ConvBlock(conv_dim, conv_dim * 2)               # 64x64 -> 32x32
-        self.conv3 = ConvBlock(conv_dim * 2, conv_dim * 4)          # 32x32 -> 16x16
-        self.conv4 = ConvBlock(conv_dim * 4, conv_dim * 8)          # 16x16 -> 8x8
-        self.conv5 = ConvBlock(conv_dim * 8, conv_dim * 8)          # 8x8 -> 4x4
-        
+        self.conv1 = ConvBlock(img_dim, conv_dim, use_bn=False)         # 128x128 -> 64x64
+        self.conv2 = ConvBlock(conv_dim, conv_dim * 2)                  # 64x64 -> 32x32
+        self.conv3 = ConvBlock(conv_dim * 2, conv_dim * 4)              # 32x32 -> 16x16
+        self.conv4 = ConvBlock(conv_dim * 4, conv_dim * 8)              # 16x16 -> 8x8
+        self.conv5 = ConvBlock(conv_dim * 8, conv_dim * 8)              # 8x8 -> 4x4
+
         self.conv6 = nn.Sequential(
             nn.Conv2d(conv_dim * 8, conv_dim * 8, kernel_size=1),
             nn.BatchNorm2d(conv_dim * 8),
@@ -102,11 +104,11 @@ class Decoder(nn.Module):
         self.deconv5 = DeconvBlock(conv_dim * 8, conv_dim * 2)
         self.deconv6 = DeconvBlock(conv_dim * 4, conv_dim)
         
-        # 활성화 함수 Tanh 사용 이유는 ?
         self.deconv7 = nn.Sequential(
             nn.ConvTranspose2d(conv_dim * 2, img_dim, 4, 2, 1),
             nn.Tanh()
         )
+        # 3x3 -> 4x4 (deconv1, deconv2) -> 8x8 -> 16x16 -> 32x32 -> 64x64 -> 128x128 (deconv3-deconv7)
 
     def forward(self, x, skip_connections):
         x = self.deconv1(x)
