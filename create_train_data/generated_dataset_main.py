@@ -8,50 +8,64 @@ from PIL import Image, ImageDraw
 import numpy as np   
 from utils import centering_image
 
+# 데이터가 저장될 경로
 FONT_DATASET_PATH = "./font_dataset"
+# 몇 개의 폰트를 이용할 것인지
 MAX_FONT_COUNT = 25
+# 하나의 폰트 당 몇 개의 데이터를 생성할지
 MAX_RAMDOM_SELECTED_WORD = 2000
+# 타겟 폰트가 있는 경로(디렉토리)
 trg_font_pth = './fonts/target'
+# 소스 폰트(고딕체)가 있는 경로
 src_font_pth = './fonts/source/source_font.ttf'
 
-# 생성한 데이터셋을 .pkl 구조로 반환
-def pickle_examples(from_dir, train_path, val_path, train_val_split=0.0, with_charid=False):
+def pickle_examples(from_dir, train_path, val_path, train_val_split=0.2, with_charid=False):
+    """
+    .pkl 파일로 변환해주는 함수
+    args:
+        from_dir :          데이터가 들어있는 디렉토리
+        train_path :        훈련용 데이터 저장 경로
+        val_path :          평가용 데이터 저장 경로
+        train_val_splite :  훈련용/평가용 데이터 비율
+        with_charid :       파일명에 글자 식별 번호 사용 여부
+    """
+
+    # glob 패키지를 이용해 훈련용, 평가용 데이터가 들어가 있는 디렉토리의 모든 파일명을 로딩한다.
     paths = glob.glob(os.path.join(from_dir, "*.png"))
+    # pickle 패키지를 이용해 훈련용, 평가용 파일에 데이터 쓰기
     with open(train_path, 'wb') as ft:
         with open(val_path, 'wb') as fv:
-            print('all data num:', len(paths))
+            print('전체 데이터 갯수:', len(paths))
             c = 1
             val_count = 0
             train_count = 0
+            # 파일명 안에 글자 식별 번호가 포함된 경우
             if with_charid:
-                print('pickle with charid')
                 # paths 경로 안에는 font_dataset 안의 파일 이름 모두 담기게 된다
                 for p in paths:
                     c += 1
+                    # [fontID]_[charID].png
                     label = int(os.path.basename(p).split("_")[0])
                     charid = int(os.path.basename(p).split("_")[1].split(".")[0])
-                    # .png 파일 하나를 열고 이미지를 읽고 
-                    # label(어떤 폰트 사용했는지), charid(문자 식별 번호), img_bytes(이미지 데이터)
+                    # .png 파일을 열고 이미지(바이너리 데이터)를 읽고 랜덤함수를 통해 데이터 분류(훈련용, 평가용)
                     with open(p, 'rb') as f:
                         img_bytes = f.read()
                         example = (label, charid, img_bytes)
                         r = random.random()
-                        # 설정한 비율데로 train val 파일에 저장된다.
+                        # 설정한 비율대로 train val 파일에 저장된다.
                         if r < train_val_split:
                             pickle.dump(example, fv)
                             val_count += 1
-                            if val_count % 10000 == 0:
-                                print("%d imgs saved in val.obj" % val_count)
                         else:
                             pickle.dump(example, ft)
                             train_count += 1
-                            if train_count % 10000 == 0:
-                                print("%d imgs saved in train.obj" % train_count)
-                print("%d imgs saved in val.obj, end" % val_count)
-                print("%d imgs saved in train.obj, end" % train_count)
+                print("%d 개의 이미지가 저장되었습니다. %s.pkl" % val_count, val_path)
+                print("%d 개의 이미지가 저장되었습니다. %s.pkl" % train_count, train_path)
+            # 파일명 안에 글자 식별 번호가 포함되지 않은 경우
             else:
                 for p in paths:
                     c += 1
+                    # [fontID]_.png
                     label = int(os.path.basename(p).split("_")[0])
                     with open(p, 'rb') as f:
                         img_bytes = f.read()
@@ -60,21 +74,17 @@ def pickle_examples(from_dir, train_path, val_path, train_val_split=0.0, with_ch
                         if r < train_val_split:
                             pickle.dump(example, fv)
                             val_count += 1
-                            if val_count % 10000 == 0:
-                                print("%d imgs saved in val.obj" % val_count)
                         else:
                             pickle.dump(example, ft)
                             train_count += 1
-                            if train_count % 10000 == 0:
-                                print("%d imgs saved in train.obj" % train_count)
-                print("%d imgs saved in val.obj, end" % val_count)
-                print("%d imgs saved in train.obj, end" % train_count)
+                print("%d 개의 이미지가 저장되었습니다. %s.pkl" % val_count, val_path)
+                print("%d 개의 이미지가 저장되었습니다. %s.pkl" % train_count, train_path)
             return
 
-# count 수 만큼 글자를 생성
 def generate_random_hangul_and_ascii():
-    # 랜덤한 한글 문자 1개와 그 문자의 아스키 코드를 생성합니다.
-    # 한글 유니코드 범위
+    """
+        한글 유니코드 내에서 랜덤한 한글 문자 1개와 그 문자의 아스키 코드를 생성
+    """
     start = 0xAC00  # 가
     end = 0xD7A3  # 힣
     
@@ -86,8 +96,15 @@ def generate_random_hangul_and_ascii():
 
     return hangul_char
 
-# 폰트별 MAX_RAMDOM_SELECTED_WORD 만큼 이미지를 생성한다
 def generated_dataset(font_id):
+    """
+    MAX_RAMDOM_SELECTED_WORD 만큼 [source, target] 이미지를 생성
+
+    source = 고딕체 글자 , target = 특정 폰트 적용 글자 
+
+    args : 
+        font_id : 생성할 폰트 번호
+    """
     if not os.path.exists(FONT_DATASET_PATH):
         os.mkdir(FONT_DATASET_PATH)
 

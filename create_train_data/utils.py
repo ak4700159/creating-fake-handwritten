@@ -2,24 +2,8 @@
 from __future__ import print_function
 from __future__ import absolute_import
 
-import scipy.misc
 import numpy as np
-from io import BytesIO
 from PIL import Image
-
-import matplotlib.pyplot as plt
-
-def pad_seq(seq, batch_size):
-    seq_len = len(seq)
-    if seq_len % batch_size == 0:
-        return seq
-    padded = batch_size - (seq_len % batch_size)
-    seq.extend(seq[:padded])
-    return seq
-
-
-def bytes_to_file(bytes_img):
-    return BytesIO(bytes_img)
 
 
 def normalize_image(img):
@@ -32,41 +16,11 @@ def normalize_image(img):
     """
     normalized = (img / 127.5) - 1.
     return normalized
-
-
-def read_split_image(img):
-    """"
-        타겟이미지와 소스이미지를 나눈다.
-
-        [h=128 * w=256] 이미지 파일을 반으로 갈라서 반환
-
-        왼쪽이 source(고딕체글자), 오른쪽이 target(폰트별 글자)
-    """
-    mat = np.array(Image.open(img)).astype(np.float32)
-    # shape[0] = height , shape[1] = weight
-    side = int(mat.shape[1] / 2)
-    assert side * 2 == mat.shape[1]
-    img_A = mat[:, :side]  # 0 ~ side / target
-    img_B = mat[:, side:]  # side ~ 전체 / source
-
-    return img_A, img_B
-
-
-def shift_and_resize_image(img, shift_x, shift_y, nw, nh):
-    w, h = img.shape
-    if isinstance(img, np.ndarray):
-        # numpy 배열을 PIL Image로 변환
-        img_pil = Image.fromarray(img)
-    else:
-        img_pil = img
-    # 이미지를 쉬프트하고 다시 원본 크기 만큼 잘라내어 반환.
-    enlarged = np.array(img_pil.resize((nh, nw), Image.Resampling.LANCZOS))
-    return enlarged[shift_x:shift_x + w, shift_y:shift_y + h]
   
     
-def tight_crop_image(img, verbose=False, resize_fix=False):
+def tight_crop_image(img, resize_fix=False):
     """
-        해당 함수에선 이미지에 대해 shift resize 
+        해당 함수에선 이미지에 대해 crop -> resize 까지 진행
     """
     # 입력 이미지의 높이를 가져옴 (정사각형 이미지 가정)
     img_size = img.shape[0]
@@ -115,7 +69,7 @@ def tight_crop_image(img, verbose=False, resize_fix=False):
         else:
             img_pil = cropped_image
             
-        # 이미지 크기 조정 후 다시 numpy 배열로 변환
+        # 이미지 크기 조정(resize_w * resize_h) 후 다시 numpy 배열로 변환
         cropped_image = np.array(img_pil.resize((resize_w, resize_h), Image.Resampling.LANCZOS))
         # 정규화 (-1 ~ 1 범위로 변환)
         cropped_image = normalize_image(cropped_image)
@@ -142,19 +96,19 @@ def tight_crop_image(img, verbose=False, resize_fix=False):
             img_pil = cropped_image
         cropped_image = np.array(img_pil.resize((resize_w, resize_h), Image.Resampling.LANCZOS))
         cropped_image = normalize_image(cropped_image)
-        cropped_image_size = cropped_image.shape
-
     return cropped_image
 
 
-def add_padding(img, image_size=128, verbose=False, pad_value=None):
+def add_padding(img, image_size=128, pad_value=None):
+    """"
+        crop -> resize 된 이미지에 대해 128 * 128 이미지로 padding
+    """
     height, width = img.shape
-    if not pad_value:
+    # 별도의 패딩 색상을 지정해주지 않으면 좌측 상단의 첫번째 픽셀을 색상으로 지정
+    if not pad_value: 
         pad_value = img[0][0]
-    if verbose:
-        print('original cropped image size:', img.shape)
     
-    # Adding padding of x axis - left, right
+    # 너비 패딩
     pad_x_width = (image_size - width) // 2
     pad_x = np.full((height, pad_x_width), pad_value, dtype=np.float32)
     img = np.concatenate((pad_x, img), axis=1)
@@ -162,7 +116,7 @@ def add_padding(img, image_size=128, verbose=False, pad_value=None):
     
     width = img.shape[1]
 
-    # Adding padding of y axis - top, bottom
+    # 높이 패딩
     pad_y_height = (image_size - height) // 2
     pad_y = np.full((pad_y_height, width), pad_value, dtype=np.float32)
     img = np.concatenate((pad_y, img), axis=0)
@@ -177,17 +131,23 @@ def add_padding(img, image_size=128, verbose=False, pad_value=None):
     if img.shape[1] % 2:
         pad = np.full((height, 1), pad_value, dtype=np.float32)
         img = np.concatenate((pad, img), axis=1)
-
-    if verbose:
-        print('final image size:', img.shape)
     
     return img
 
-def centering_image(img, image_size=128, verbose=False, resize_fix=False, pad_value=None):
+def centering_image(img, image_size=128, resize_fix=90, pad_value=None): 
+    """
+    이미지 전처리 : crop -> resize -> padding
+
+    args 
+        img        : numpy 형태의 원본 img 데이터
+        image_size : 출력될 이미지 크기
+        resize_fix : 이미지 crop 이후 비율을 유지한 상태에서 이미지 크기
+        pad_value  : 글자와 모서리 간 여백 색상값 0 ~ 255 (지정하지 않으면 여백은 횐색)
+    """
     if not pad_value:
         pad_value = img[0][0]
-    cropped_image = tight_crop_image(img, verbose=verbose, resize_fix=resize_fix)
-    centered_image = add_padding(cropped_image, image_size=image_size, verbose=verbose, pad_value=pad_value)
+    cropped_image = tight_crop_image(img, resize_fix=resize_fix)
+    centered_image = add_padding(cropped_image, image_size=image_size, pad_value=pad_value)
     
     return centered_image
 
