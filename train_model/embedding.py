@@ -44,13 +44,10 @@ def generate_font_embeddings(
     
     try:
         torch.save(embeddings, save_path)
-        print(f"Font embeddings generated and saved to {save_path}")
-        print(f"Shape: {embeddings.shape}")
     except Exception as e:
         print(f"Error saving embeddings: {e}")
         
     return embeddings
-
 
 def load_embeddings(embedding_path: str, device: torch.device):
     """안전하게 임베딩 로드"""
@@ -66,7 +63,6 @@ def load_embeddings(embedding_path: str, device: torch.device):
         if not isinstance(font_embeddings, torch.Tensor):
             raise TypeError("Loaded embeddings is not a torch.Tensor")
             
-        print(f"Loaded font embeddings with shape: {font_embeddings.shape}")
         return font_embeddings
         
     except Exception as e:

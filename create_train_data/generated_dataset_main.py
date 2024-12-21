@@ -195,6 +195,9 @@ def main():
         threads[font_idx].join()   
         
 if __name__ == "__main__":
+    # main()
+    # 생성한 학습용 데이터를 train / value 데이터로 나눈다 (4:1) --> .pkl 파일에 저장
+    pickle_examples('../process_handwritten/handwritten_result', '../train_model/dataset/handwritten_train.pkl', '../train_model/dataset/handwritten_val.pkl', with_charid=True)
     main()
     # 생성한 학습용 데이터를 train / value 데이터로 나누어 저장.
     pickle_examples('./handwritten_result', '../dataset/handwritten_train.pkl', '../dataset/handwritten_val.pkl', with_charid=True)

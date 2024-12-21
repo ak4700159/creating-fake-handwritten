@@ -39,10 +39,11 @@ def resume_training(checkpoint_path: str, config: GANConfig, data_dir: str, save
             param.requires_grad = False
         # 인코더의 가중치는 평가모드
         gan.encoder.eval()
+        gan.fine_tune = True
         
         print("Encoder loaded and frozen for transfer learning")
         
-        # 새로운 학습 시작
+        # 새로운 학습 시작, 전이학습 시작
         return train_font_gan(config, data_dir, save_dir, device, 
                             start_epoch=0,
                             initial_model=gan)
@@ -97,7 +98,23 @@ def save_checkpoint(model: FontGAN, epoch: int, losses: dict, save_path: Path):
 # 파라미터 설멸
 # config : 학습 과정
 def train_font_gan(config: GANConfig, data_dir: str, save_dir: str, device: torch.device, 
-                  start_epoch: int = 0, initial_model: Optional[FontGAN] = None, target_font_id: int = 10):
+                  start_epoch: int = 0, initial_model: Optional[FontGAN] = None):
+    """
+        GAN 학습 함수
+        1) data_dir를 통해 학습용, 평가용 데이터 모두 로딩
+        2) 학습 기록을 남겨두기 위한 csv파일 생성
+        3) 효율적인 학습을 위한 스케줄러 등록
+        4) 매배치마다 train_step 메소드 호출
+        5) 주기적으로 로그 출력, 체크 포인트 저장, csv 파일 기록, 모델 평가 + best모델 저장
+
+        args:
+            config         : GAN 설정 객체
+            data_dir       : 데이터셋이 있는 경로
+            save_dir       : 학습 결과물이 저장될 경로
+            device         : CPU OR GPU
+            start_epoch    : 전이 학습하지 않고 이전에 학습하던 모델 이어서 학습할 경우
+            initial_model  : 기존 전이학습 모델, FontGAN 객체(가중치 모두 로딩)
+    """
     print("\n=== Starting Font GAN Training ===")
     print(f"Device: {device}")
     print(f"Data directory: {data_dir}")
@@ -122,7 +139,7 @@ def train_font_gan(config: GANConfig, data_dir: str, save_dir: str, device: torc
     font_embeddings = load_embeddings(embedding_path, device)
     
     # 학습용 데이터 로더 설정
-    train_dataset = FontDataset(data_dir, "train.pkl", img_size = config.img_size)
+    train_dataset = FontDataset(data_dir, "handwritten_train.pkl", img_size = config.img_size)
     # nun_workers = 데이터를 로드할 때 복수개의 프로세스로 멀티 프로세싱을 수행, CPU가 빠르게 데이터를 로딩해서 GPU의 연산 시간 비율을 높이기 위함.
     # pin_meomeory = 메모리의 데이터를 GPU로 옮길 때 시간을 단축시키기 위함.
     train_loader = DataLoader(
@@ -134,11 +151,11 @@ def train_font_gan(config: GANConfig, data_dir: str, save_dir: str, device: torc
     )
 
     # 평가용 데이터로더 설정
-    val_dataset = FontDataset(data_dir, "val.pkl", img_size = config.img_size)
+    val_dataset = FontDataset(data_dir, "handwritten_val.pkl", img_size = config.img_size)
     val_loader = DataLoader(
         val_dataset,
         batch_size=config.batch_size,
-        shuffle=False,
+        shuffle=True,
         num_workers=4,
         pin_memory=True
     )
@@ -249,8 +266,8 @@ def train_font_gan(config: GANConfig, data_dir: str, save_dir: str, device: torc
             metrics = gan.evaluate_metrics(val_loader, font_embeddings)
             
             # 평가 샘플 생성
-            eval_dir = Path(save_dir) / 'evaluation' / f'epoch_{epoch+1}'
-            gan.generate_evaluation_samples(val_loader, font_embeddings, eval_dir)
+            eval_dir = Path(save_dir) / 'evaluation'
+            gan.generate_evaluation_samples(val_loader, font_embeddings, eval_dir, epoch=epoch)
 
             # CSV에 평가 지표 기록   
             with open(eval_loss_file, 'a', newline='') as f:
@@ -262,22 +279,12 @@ def train_font_gan(config: GANConfig, data_dir: str, save_dir: str, device: torc
                     metrics['discriminator_acc'],
                     metrics['font_classification_acc']
                 ])
-        
 
         # 일정 주기로 체크포인트 저장
         if (epoch + 1) % config.model_save_step == 0: 
             timestamp = datetime.now().strftime("%m%d-%H%M")
             save_path = checkpoint_dir / f'checkpoint_epoch_{epoch+1}_{timestamp}.pth'
             save_checkpoint(gan, epoch, avg_losses, save_path)
-            
-            # 샘플 이미지 생성 및 저장
-            gan.save_samples(
-                sample_dir / f'samples_epoch_{epoch+1}_{timestamp}.png',
-                source[:8].to(device), 
-                target[:8].to(device), 
-                font_ids[:8].to(device),
-                font_embeddings
-            )
         
         # 최고 성능 모델 저장
         current_loss = avg_losses['g_loss']
@@ -293,7 +300,7 @@ def train_font_gan(config: GANConfig, data_dir: str, save_dir: str, device: torc
 def main():
     # Paths
     data_dir = "./dataset"
-    save_dir = "./final_data"
+    save_dir = "./pre_trained_data"
     checkpoint_path = "./final_data/checkpoints/best_model.pth"  # 이전 체크포인트 경로
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

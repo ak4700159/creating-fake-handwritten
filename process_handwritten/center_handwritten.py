@@ -42,8 +42,8 @@ class HandwritingPreprocessor:
                 
                 # 이미지 처리 및 저장
                 combined = self._create_combined_image(
-                    self._extract_handwriting(original),
-                    self._extract_gothic(original)
+                    self._extract_gothic(original),
+                    self._extract_handwriting(original)
                 )
                 
                 # 저장
@@ -88,7 +88,7 @@ class HandwritingPreprocessor:
         combined = Image.new('L', (self.img_size * 2, self.img_size), 255)
         
         # 고딕체 붙이기 (왼쪽)
-        combined.paste(gothic, (0, 0))
+        combined.paste(gothic, (self.img_size, 0)) 
         
         # 손글씨 중앙 정렬을 위한 처리
         hw_array = np.array(handwriting)
@@ -104,8 +104,8 @@ class HandwritingPreprocessor:
             # 새로운 크기 계산 (비율 유지)
             content_width = right - left + 1
             content_height = bottom - top + 1
-            ratio = min(self.img_size * 0.8 / content_width, 
-                       self.img_size * 0.8 / content_height)
+            ratio = min(self.img_size * 0.6 / content_width, 
+                       self.img_size * 0.6 / content_height)
             
             new_width = int(content_width * ratio)
             new_height = int(content_height * ratio)
@@ -114,27 +114,118 @@ class HandwritingPreprocessor:
             content = content.resize((new_width, new_height), Image.LANCZOS)
             
             # 중앙 위치 계산
-            paste_x = self.img_size + (self.img_size - new_width) // 2
+            paste_x = (self.img_size - new_width) // 2 
             paste_y = (self.img_size - new_height) // 2
             
-            # 손글씨 붙이기 (오른쪽 중앙)
+            # 손글씨 붙이기 (왼쪽 중앙)
             combined.paste(content, (paste_x, paste_y))
         
         return combined
 
 
+import os
+from pathlib import Path
+import numpy as np
+from PIL import Image
+from tqdm import tqdm
+import random
+
+class HandwritingAugmentor(HandwritingPreprocessor):
+    def __init__(self, input_dir: str, output_dir: str, font_id: int = 26):
+        super().__init__(input_dir, output_dir, font_id)
+        
+    def process_images_with_augmentation(self):
+        """이미지 처리 및 증강"""
+        image_files = list(self.input_dir.glob("*.png"))
+        print(f"Found {len(image_files)} images to process")
+        successfully_processed = 0
+        
+        for img_path in tqdm(image_files, desc="Processing images"):
+            try:
+                original = Image.open(img_path)
+                unicode_value = self._get_unicode_from_filename(img_path.name)
+                
+                # 원본 이미지 처리
+                original_combined = self._create_combined_image(
+                    self._extract_gothic(original),
+                    self._extract_handwriting(original)
+                )
+
+                # 원본 이미지 처리
+                original_combined2 = self._create_combined_image(
+                    self._extract_gothic(original),
+                    self._extract_handwriting(original)
+                )                
+                
+                # 위치가 변경된 이미지 생성
+                shifted_handwriting = self._create_shifted_handwriting(self._extract_handwriting(original))
+                shifted_combined = self._create_combined_image(
+                    self._extract_gothic(original),
+                    shifted_handwriting
+                )
+                
+                # 파일 저장
+                base_filename = f"{self.font_id}_{unicode_value}"
+                original_combined.save(self.output_dir / f"{base_filename}1.png")
+                original_combined2.save(self.output_dir / f"{base_filename}2.png")
+                shifted_combined.save(self.output_dir / f"{base_filename}3.png")
+                
+                successfully_processed += 1
+                
+            except Exception as e:
+                print(f"\nError processing {img_path.name}: {e}")
+        
+        print(f"\nProcessing complete!")
+        print(f"Successfully processed: {successfully_processed} / {len(image_files)} images")
+        print(f"Total generated images: {successfully_processed * 3}")
+
+    def _create_shifted_handwriting(self, handwriting: Image.Image) -> Image.Image:
+        """손글씨 이미지의 위치를 랜덤하게 이동"""
+        # 흰색 배경의 새 이미지 생성
+        background = Image.new('L', (self.img_size, self.img_size), 255)
+        
+        # 랜덤 이동 거리 선택 (0~10 픽셀)
+        shift_x = random.randint(0, 10)
+        shift_y = random.randint(0, 10)
+        
+        # 중앙 정렬을 위한 처리
+        hw_array = np.array(handwriting)
+        coords = np.where(hw_array < 255)
+        
+        if len(coords[0]) > 0:
+            top, bottom = coords[0].min(), coords[0].max()
+            left, right = coords[1].min(), coords[1].max()
+            
+            # 글자 영역 추출 및 크기 조정
+            content = handwriting.crop((left, top, right + 1, bottom + 1))
+            
+            # 새로운 크기 계산 (비율 유지)
+            content_width = right - left + 1
+            content_height = bottom - top + 1
+            ratio = min(self.img_size * 0.6 / content_width, 
+                       self.img_size * 0.6 / content_height)
+            
+            new_width = int(content_width * ratio)
+            new_height = int(content_height * ratio)
+            content = content.resize((new_width, new_height), Image.LANCZOS)
+            
+            # 이동된 위치에 붙이기
+            paste_x = (self.img_size - new_width) // 2 + shift_x
+            paste_y = (self.img_size - new_height) // 2 + shift_y
+            background.paste(content, (paste_x, paste_y))
+        
+        return background
+
 def main():
-    # 경로 설정 (사용자가 지정할 수 있도록)
     input_dir = "./handwriting_templates"
     output_dir = "./handwritten_result"
-    font_id = 10  # 고정된 폰트 ID
+    font_id = 10
     
-    # 전처리기 생성 및 실행
-    preprocessor = HandwritingPreprocessor(input_dir, output_dir, font_id)
+    augmentor = HandwritingAugmentor(input_dir, output_dir, font_id)
     
     try:
-        preprocessor.process_images()
-        print("\n이미지 처리가 완료되었습니다!")
+        augmentor.process_images_with_augmentation()
+        print("\n이미지 증강이 완료되었습니다!")
         print(f"처리된 이미지가 {output_dir}에 저장되었습니다.")
     except Exception as e:
         print(f"처리 중 오류가 발생했습니다: {e}")

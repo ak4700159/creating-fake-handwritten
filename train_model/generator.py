@@ -18,6 +18,7 @@ class FontGAN(nn.Module):
         self.config = config
         self.device = device
         self.train_step_count = 0
+        self.fine_tune = fine_tune
         
         # 모델 구조 초기화, 생성자(인코더 + 디코더)와 디코더로 이루어져 있다.
         self.encoder = Encoder(conv_dim=128).to(device)  # 원본 모델과 동일한 구조 유지
@@ -59,24 +60,26 @@ class FontGAN(nn.Module):
         self.mse_loss = nn.MSELoss().to(device)
 
     def _get_embeddings(self, embeddings: torch.Tensor, ids: torch.Tensor) -> torch.Tensor:
-        # adjusted_ids.shape = [batch_size]  # 예: [16]
-        # 모든 값이 4 -> 데이터가 전부 5번 폰트일 때 : tensor([4, 4, 4, ..., 4])
-        adjusted_ids = ids - 1               # 폰트 식별 번호로 인덱싱하기 위해 0부터 시작
-        selected = embeddings[adjusted_ids]  # [batch_size, 128, 3, 3] 형태
-        return selected                   
-    
-    def _adversial_loss(self, d_real_patch: torch.Tensor, d_fake_patch: torch.Tensor) -> torch.Tensor:
+        """폰트 임베딩을 가져오는 함수
+        
+        Args:
+            embeddings: [num_fonts, channels, height, width] 형태의 텐서
+            ids: [batch_size, 1] 형태의 텐서
+            
+        Returns:
+            [batch_size, channels, height, width] 형태의 텐서
         """
-            adv loss = 판별자가 생성된 가짜 이미지와 원본 target이미지를 판단하는 손실값
-            판별자는 가짜 이미지는 0에 가깝게 target 이미지는 1에 가깝게 학습
-
-            Label smoothing을 통해 모델의 과잉 확신을 방지하고 라벨 간 클러스터링이 더욱 밀집된 결과를 얻을 수 있게됨
-        """
-        real_labels = torch.ones_like(d_real_patch).to(self.device) * 0.9
-        fake_labels = torch.zeros_like(d_fake_patch).to(self.device) * 0.1
-        d_loss_real = self.bce_loss(d_real_patch, real_labels)
-        d_loss_fake = self.bce_loss(d_fake_patch, fake_labels)
-        return (d_loss_real + d_loss_fake) * 0.5
+        adjusted_ids = ids.squeeze(-1) - 1  # 마지막 차원 제거
+        selected = embeddings[adjusted_ids]  # 인덱싱
+        
+        # 차원 확인 및 필요한 경우 조정
+        if selected.dim() > 4:
+            selected = selected.squeeze(1)
+        
+        # 배치 차원이 없는 경우 추가
+        if selected.dim() == 3:
+            selected = selected.unsqueeze(0)
+        return selected * 2.0
     
     def _consistency_loss(self, encoded_source: torch.Tensor, fake_target: torch.Tensor) -> torch.Tensor:
         """
@@ -95,9 +98,9 @@ class FontGAN(nn.Module):
         self.discriminator.eval()
 
     # 인코더 학습 여부 = mode
-    def train(self, fine_tune=False):
+    def train(self):
         """학습 모드로 전환"""
-        if fine_tune:
+        if self.fine_tune:
             # 학습 모드에서도 인코더는 eval 모드 유지
             self.encoder.eval()
             self.decoder.train()
@@ -135,15 +138,11 @@ class FontGAN(nn.Module):
         try:
             with torch.no_grad():  # 메모리 효율성을 위해 그래디언트 계산 비활성화
                 # 배치 크기 제한
-                source = source[:num_samples]
-                target = target[:num_samples]
-                font_ids = font_ids[:num_samples]
-                
-                # 가짜 이미지 생성 과정
+                source = source[:num_samples].to(self.device)
+                target = target[:num_samples].to(self.device)
+                font_ids = font_ids[:num_samples].to(self.device)
+                        
                 encoded_source, skip_connections = self.encoder(source)
-    
-                
-                # 폰트 임베딩 처리
                 embedding = self._get_embeddings(font_embeddings, font_ids)
                 embedded = torch.cat([encoded_source, embedding], dim=1)
                 
@@ -167,8 +166,8 @@ class FontGAN(nn.Module):
                 save_image(
                     comparison,
                     save_path,
-                    nrow=1,  # 각 행에 하나의 샘플 세트
-                    padding=10,  # 이미지 간 여백
+                    nrow=4,  # 각 행에 하나의 샘플 세트
+                    padding=5,  # 이미지 간 여백
                     normalize=False
                 )
                 
@@ -182,10 +181,22 @@ class FontGAN(nn.Module):
             # 이전 학습/평가 모드로 복원
             if was_training:
                 self.train()
-        
+
+    def _adversial_loss(self, d_real_patch: torch.Tensor, d_fake_patch: torch.Tensor) -> torch.Tensor:
+        """
+            adv loss = 판별자가 생성된 가짜 이미지와 원본 target이미지를 판단하는 손실값
+            판별자는 가짜 이미지는 0에 가깝게 target 이미지는 1에 가깝게 학습
+
+            Label smoothing을 통해 모델의 과잉 확신을 방지하고 라벨 간 클러스터링이 더욱 밀집된 결과를 얻을 수 있게됨
+        """
+        real_labels = torch.ones_like(d_real_patch).to(self.device) * 0.9
+        fake_labels = torch.zeros_like(d_fake_patch).to(self.device) * 0.1
+        d_loss_real = self.bce_loss(d_real_patch, real_labels)
+        d_loss_fake = self.bce_loss(d_fake_patch, fake_labels)
+        return (d_loss_real + d_loss_fake) * 0.5
+
     def train_step(self, real_source, real_target, font_embeddings, font_ids):
         """배치별 학습을 진행하는 함수
-        
         Args:
             real_source (torch.Tensor): 원본 고딕체 이미지 배치
             real_target (torch.Tensor): 실제 손글씨 이미지 배치
@@ -231,7 +242,7 @@ class FontGAN(nn.Module):
 
         # 판별자의 losses
         # 1) d_loss_adv : 판별자가 제대로 이미지를 분류할 수 있도록 하기위한 손실값, 실제 이미지는 1에 가깝게, 가짜 이미지는 0이 나오도록 학습
-        d_loss_adv = _adversial_loss(d_real_patch, d_fake_patch)
+        d_loss_adv = self._adversial_loss(d_real_patch, d_fake_patch)
         # 2) d_loss_cat : 원본 target 데이터의 카테고리에 대한 손실값, 원본 target 데이터터를 더 잘 분류하기 위함
         d_loss_cat = self.bce_loss(d_real_cat, F.one_hot(font_ids, self.config.fonts_num).float())
         d_total_loss = d_loss_adv + d_loss_cat
@@ -252,13 +263,13 @@ class FontGAN(nn.Module):
         
         # 생성자의 losses, 생성자 손실값에 각 각의 가중치를 부여
         # 1) g_loss_adv : 생성자가 판별자를 속이기 위한 손실값, 가짜 이미지 텐소의 스코어가 1에 가깝도록 학습 
-        g_loss_adv = self.bce_loss(g_fake_patch, torch.ones_like(g_fake_patch)) * self.config.lambda_adv
+        g_loss_adv = self.bce_loss(g_fake_patch, torch.ones_like(g_fake_patch)) * self.config.adv_lambda
         # 2) l1_loss : 생성된 이미지와 기존 폰트 글자와의 차이(pixel by pixel)  
         g_loss_l1 = self.l1_loss(fake_target, real_target) * l1_lambda
         # 3) const_loss : 기존 글자 특징 유지 
         g_loss_const = self._consistency_loss(encoded_source, fake_target) * const_lambda
         # 4) category_loss : 생성한 가짜 데이터의 카테고리에 대한 손실값, 생성한 가짜 데이터를 더 잘 분류하기 위함
-        g_loss_cat = self.bce_loss(g_fake_cat, F.one_hot(font_ids, self.config.fonts_num).float())  * self.config.lambda_cat
+        g_loss_cat = self.bce_loss(g_fake_cat, F.one_hot(font_ids, self.config.fonts_num).float())  * self.config.cat_lambda
         g_total_loss = g_loss_adv + g_loss_l1 + g_loss_const + g_loss_cat
         
         # 생성자 가중치 조정
@@ -275,11 +286,10 @@ class FontGAN(nn.Module):
             'const_loss': g_loss_const.item(),
             'cat_loss': g_loss_cat.item()
         }
-    
 
-    def evaluate_metrics(self, dataer, font_embeddings):
+    def evaluate_metrics(self, val_loader, font_embeddings):
         """모델 성능 평가 함수"""
-        self.eval()
+        self.eval()  
         metrics = {
             'l1_loss': [],
             'const_loss': [],
@@ -290,10 +300,10 @@ class FontGAN(nn.Module):
         try:
             with torch.no_grad():
                 # 데이터 로더가 비어있는지 확인
-                if len(dataer) == 0:
+                if len(val_loader) == 0:
                     raise ValueError("ValDataer is empty")
                     
-                for batch_idx, (source, target, font_ids) in enumerate(dataer):
+                for batch_idx, (source, target, font_ids) in enumerate(val_loader):
                     source = source.to(self.device)
                     target = target.to(self.device)
                     font_ids = font_ids.to(self.device)
@@ -349,30 +359,64 @@ class FontGAN(nn.Module):
         finally:
             self.train()
 
-    def generate_evaluation_samples(self, dataer, font_embeddings, save_dir: Path):
+    def generate_evaluation_samples(self, val_loader, font_embeddings, save_dir: Path, epoch: int):
         self.eval()
         save_dir.mkdir(parents=True, exist_ok=True)
         
-        # 전체 데이터셋에서 서로 다른 폰트를 가진 샘플 수집
+        # 폰트 ID별로 샘플을 수집할 딕셔너리
         unique_samples = {}
+        # 폰트 ID별로 수집된 샘플 개수를 추적
+        sample_counts = {}
         
-        for source, target, font_ids in dataer:
+        for source, target, font_ids in val_loader:
             for i, font_id in enumerate(font_ids):
                 font_id = font_id.item()
-                if font_id not in unique_samples and len(unique_samples) < 10:
-                    unique_samples[font_id] = (source[i:i+1], target[i:i+1])
-                if len(unique_samples) == 10:
+                
+                # 아직 충분한 폰트 종류를 수집하지 않았고, 현재 폰트의 샘플이 필요한 경우
+                if len(unique_samples) < self.config.eval_fonts or \
+                (font_id in sample_counts and sample_counts[font_id] < self.config.eval_samples):
+                    
+                    # 새로운 폰트 ID 초기화
+                    if font_id not in unique_samples:
+                        unique_samples[font_id] = {
+                            'sources': [],
+                            'targets': []
+                        }
+                        sample_counts[font_id] = 0
+                    
+                    # 필요한 샘플 수에 도달하지 않은 경우에만 샘플 추가
+                    if sample_counts[font_id] < self.config.eval_samples:
+                        unique_samples[font_id]['sources'].append(source[i:i+1])
+                        unique_samples[font_id]['targets'].append(target[i:i+1])
+                        sample_counts[font_id] += 1
+                
+                # 모든 폰트에 대해 충분한 샘플을 수집했는지 확인
+                if len(unique_samples) == self.config.eval_fonts and \
+                all(count >= self.config.eval_samples for count in sample_counts.values()):
                     break
-            if len(unique_samples) == 10:
+                    
+            # 모든 필요한 샘플을 수집했으면 반복 중단
+            if len(unique_samples) == self.config.eval_fonts and \
+            all(count >= self.config.eval_samples for count in sample_counts.values()):
                 break
         
         # 수집된 샘플로 이미지 생성
-        for idx, (font_id, (source, target)) in enumerate(unique_samples.items()):
-            # save_samples 함수에서 모델을 통해 이미지 생성
-            self.save_samples(
-                save_dir / f'eval_sample_font_{font_id.item()}.png',
-                source,
-                target,
-                font_id,
-                font_embeddings
-            )
+        with torch.no_grad():
+            for font_id, samples in unique_samples.items():
+                try:
+                    # 수집된 샘플들을 하나의 텐서로 결합
+                    sources = torch.cat(samples['sources'], dim=0)
+                    targets = torch.cat(samples['targets'], dim=0)
+                    font_id_tensor = torch.tensor([font_id] * len(samples['sources']), 
+                                            device=self.device).long()
+                    
+                    self.save_samples(
+                        save_dir / f'eval_sample_font_{epoch}.png',
+                        sources,
+                        targets,
+                        font_id_tensor,
+                        font_embeddings
+                    )
+                except Exception as e:
+                    print(f"Font {font_id} 샘플 저장 실패: {e}")
+                    print(f"상세 에러: {str(e)}")
