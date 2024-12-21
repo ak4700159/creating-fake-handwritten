@@ -74,7 +74,6 @@ class Decoder(nn.Module):
     def __init__(self, img_dim=1, embedded_dim=1152, conv_dim=128):
         super().__init__()
         
-        # Decoder layers with skip connections and dropouts
         self.deconv1 = nn.Sequential(
             nn.ConvTranspose2d(
                 embedded_dim,

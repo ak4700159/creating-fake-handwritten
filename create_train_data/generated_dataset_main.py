@@ -1,61 +1,71 @@
-from time import sleep
 from PIL import ImageFont
 import os
 import random
-import gc
 import glob
 import pickle as pickle
-from functools import cache, lru_cache
 import threading
+from PIL import Image, ImageDraw
+import numpy as np   
+from utils import centering_image
 
-
-
+# 데이터가 저장될 경로
 FONT_DATASET_PATH = "./font_dataset"
+# 몇 개의 폰트를 이용할 것인지
 MAX_FONT_COUNT = 25
+# 하나의 폰트 당 몇 개의 데이터를 생성할지
 MAX_RAMDOM_SELECTED_WORD = 2000
+# 타겟 폰트가 있는 경로(디렉토리)
+trg_font_pth = './fonts/target'
+# 소스 폰트(고딕체)가 있는 경로
+src_font_pth = './fonts/source/source_font.ttf'
 
-# from_dir = './font_dataset
-# train_path = "../dataset/train"
-# val_path = "../dataset/val"
-# train_val_split = 트레인 데이터와 평가 데이터의 비율을 의미
-# with_charid = 제목에 char_id가 표시되어 있는지
-def pickle_examples(from_dir, train_path, val_path, train_val_split=0.05, with_charid=False):
+def pickle_examples(from_dir, train_path, val_path, train_val_split=0.2, with_charid=False):
+    """
+    .pkl 파일로 변환해주는 함수
+    args:
+        from_dir :          데이터가 들어있는 디렉토리
+        train_path :        훈련용 데이터 저장 경로
+        val_path :          평가용 데이터 저장 경로
+        train_val_splite :  훈련용/평가용 데이터 비율
+        with_charid :       파일명에 글자 식별 번호 사용 여부
+    """
+
+    # glob 패키지를 이용해 훈련용, 평가용 데이터가 들어가 있는 디렉토리의 모든 파일명을 로딩한다.
     paths = glob.glob(os.path.join(from_dir, "*.png"))
+    # pickle 패키지를 이용해 훈련용, 평가용 파일에 데이터 쓰기
     with open(train_path, 'wb') as ft:
         with open(val_path, 'wb') as fv:
-            print('all data num:', len(paths))
+            print('전체 데이터 갯수:', len(paths))
             c = 1
             val_count = 0
             train_count = 0
+            # 파일명 안에 글자 식별 번호가 포함된 경우
             if with_charid:
-                print('pickle with charid')
                 # paths 경로 안에는 font_dataset 안의 파일 이름 모두 담기게 된다
                 for p in paths:
                     c += 1
+                    # [fontID]_[charID].png
                     label = int(os.path.basename(p).split("_")[0])
                     charid = int(os.path.basename(p).split("_")[1].split(".")[0])
-                    # .png 파일 하나를 열고 이미지를 읽고 
-                    # label(어떤 폰트 사용했는지), charid(문자 식별 번호), img_bytes(이미지 데이터)
+                    # .png 파일을 열고 이미지(바이너리 데이터)를 읽고 랜덤함수를 통해 데이터 분류(훈련용, 평가용)
                     with open(p, 'rb') as f:
                         img_bytes = f.read()
                         example = (label, charid, img_bytes)
                         r = random.random()
-                        # 설정한 비율데로 train val 파일에 저장된다.
+                        # 설정한 비율대로 train val 파일에 저장된다.
                         if r < train_val_split:
                             pickle.dump(example, fv)
                             val_count += 1
-                            if val_count % 10000 == 0:
-                                print("%d imgs saved in val.obj" % val_count)
                         else:
                             pickle.dump(example, ft)
                             train_count += 1
-                            if train_count % 10000 == 0:
-                                print("%d imgs saved in train.obj" % train_count)
-                print("%d imgs saved in val.obj, end" % val_count)
-                print("%d imgs saved in train.obj, end" % train_count)
+                print("%d 개의 이미지가 저장되었습니다. %s.pkl" % val_count, val_path)
+                print("%d 개의 이미지가 저장되었습니다. %s.pkl" % train_count, train_path)
+            # 파일명 안에 글자 식별 번호가 포함되지 않은 경우
             else:
                 for p in paths:
                     c += 1
+                    # [fontID]_.png
                     label = int(os.path.basename(p).split("_")[0])
                     with open(p, 'rb') as f:
                         img_bytes = f.read()
@@ -64,21 +74,17 @@ def pickle_examples(from_dir, train_path, val_path, train_val_split=0.05, with_c
                         if r < train_val_split:
                             pickle.dump(example, fv)
                             val_count += 1
-                            if val_count % 10000 == 0:
-                                print("%d imgs saved in val.obj" % val_count)
                         else:
                             pickle.dump(example, ft)
                             train_count += 1
-                            if train_count % 10000 == 0:
-                                print("%d imgs saved in train.obj" % train_count)
-                print("%d imgs saved in val.obj, end" % val_count)
-                print("%d imgs saved in train.obj, end" % train_count)
+                print("%d 개의 이미지가 저장되었습니다. %s.pkl" % val_count, val_path)
+                print("%d 개의 이미지가 저장되었습니다. %s.pkl" % train_count, train_path)
             return
 
-# count 수 만큼 글자를 생성
 def generate_random_hangul_and_ascii():
-    # 랜덤한 한글 문자 1개와 그 문자의 아스키 코드를 생성합니다.
-    # 한글 유니코드 범위
+    """
+        한글 유니코드 내에서 랜덤한 한글 문자 1개와 그 문자의 아스키 코드를 생성
+    """
     start = 0xAC00  # 가
     end = 0xD7A3  # 힣
     
@@ -88,14 +94,17 @@ def generate_random_hangul_and_ascii():
     # 유니코드를 문자로 변환
     hangul_char = chr(char_code)
 
-    # 문자를 아스키 코드로 변환
-    # utf8_bytes = list(hangul_char.encode('utf-8'))
-    
     return hangul_char
 
-
-# 폰트별 MAX_RAMDOM_SELECTED_WORD 만큼 이미지를 생성한다
 def generated_dataset(font_id):
+    """
+    MAX_RAMDOM_SELECTED_WORD 만큼 [source, target] 이미지를 생성
+
+    source = 고딕체 글자 , target = 특정 폰트 적용 글자 
+
+    args : 
+        font_id : 생성할 폰트 번호
+    """
     if not os.path.exists(FONT_DATASET_PATH):
         os.mkdir(FONT_DATASET_PATH)
 
@@ -108,28 +117,76 @@ def generated_dataset(font_id):
         if ch in ch_list : continue
 
         if font_id < 10 :
-            trg_path = ft.TRG_PATH + "0" + str(font_id) + ".ttf"
+            trg_font_pth = trg_font_pth + "0" + str(font_id+1) + ".ttf"
         else :
-            trg_path = f"{ft.TRG_PATH}{font_id}.ttf"
+            trg_font_pth = f"{trg_font_pth}{font_id+1}.ttf"
         
-        # 두번재 파라미터는 글자크기를 의미
-        trg_font = ImageFont.truetype(trg_path, 90)
-        src_font = ImageFont.truetype(src_path, 90)
+        # 폰트 객체 생성, 두번재 파라미터는 폰트 크기를 의미
+        trg_font = ImageFont.truetype(trg_font_pth, 90)
+        src_font = ImageFont.truetype(src_font_pth, 90)
 
-        example_img = ft.draw_example(ch, src_font, trg_font, 128)
+        example_img = draw_example(ch, src_font, trg_font, 128)
         if example_img == None: continue
 
         # 이미지가 저장될 때 사용된 폰트 번호 _ 식별할 수 있는 문자값
-        # 동일한 파일 존재시 처음부터.
         example_img.save(f"{FONT_DATASET_PATH}/{font_id}_{ord(ch)}.png", 'png', optimize=True)
         ch_list.add(ch)
         count += 1
     print(f'폰트 {font_id} 생성')
 
+def draw_single_char(ch, font, canvas_size):
+    # L = 흑백이미지를 의미 
+    # 단순 128 * 128 사이즈의 흑백 이미지 생성
+    image = Image.new('L', (canvas_size, canvas_size), color=255)
+    # 흑백 이미지 그리기
+    drawing = ImageDraw.Draw(image)
+
+    _, _, w, h = font.getbbox(ch)
+    drawing.text(
+        ((canvas_size-w)/2, (canvas_size-h)/2),
+        ch,
+        fill=(0),
+        font=font
+    )
+    flag = np.sum(np.array(image))
+    
+    # 해당 font에 글자가 없으면 return None
+    # 즉 이때 흰색을 의미함.
+    if flag == 255 * 128 * 128:
+        return None
+    
+    return image
+
+def draw_example(ch, src_font, dst_font, canvas_size):
+    # 특정 스타일로 만들어낸 단일 글자 생성(target image)
+    dst_img = draw_single_char(ch, dst_font, canvas_size)
+    # 해당 이미지에 글자가 없으면 return None
+    if not dst_img:
+        return None
+    # 열과 행을 슬라이싱 후 crop -> resize -> padding 과정을 거치게 된다.
+    dst_img = centering_image(np.array(dst_img), pad_value = 255)
+    dst_img = Image.fromarray(dst_img.astype(np.uint8))
+    
+    # 고딕체 스타일로 만들어낸 단일 글자 생성(source image)
+    src_img = draw_single_char(ch, src_font, canvas_size)
+    # 해당 이미지에 글자가 없으면 return None
+    if not src_img:
+        return None
+    src_img = centering_image(np.array(src_img))
+    src_img = Image.fromarray(src_img.astype(np.uint8))
+
+    # 이미지 합치기
+    example_img = Image.new("RGB", (canvas_size * 2, canvas_size), (255, 255, 255)).convert('L')
+    # 왼쪽엔 특정 폰트로 만들어낸 단일 글자, 오른쪽엔 고딕체로 만들어낸 단일 글자
+    example_img.paste(dst_img, (0, 0))
+    example_img.paste(src_img, (canvas_size, 0))   
+    
+    return example_img
 
 def main():
     threads = [] 
-    for font_idx in range(1, MAX_FONT_COUNT + 1):
+    # 멀티 스레드를 이용해 프로그램이 뻗기 전 모든 글자를 뽑아낸다
+    for font_idx in range(0, MAX_FONT_COUNT):
         t = threading.Thread(target=generated_dataset, args=(font_idx,))
         t.start()
         threads.append(t)
@@ -141,4 +198,7 @@ if __name__ == "__main__":
     # main()
     # 생성한 학습용 데이터를 train / value 데이터로 나눈다 (4:1) --> .pkl 파일에 저장
     pickle_examples('../process_handwritten/handwritten_result', '../train_model/dataset/handwritten_train.pkl', '../train_model/dataset/handwritten_val.pkl', with_charid=True)
+    main()
+    # 생성한 학습용 데이터를 train / value 데이터로 나누어 저장.
+    pickle_examples('./handwritten_result', '../dataset/handwritten_train.pkl', '../dataset/handwritten_val.pkl', with_charid=True)
 

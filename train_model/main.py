@@ -17,6 +17,13 @@ import numpy as np
 import os
 from PIL import Image
 
+# datach() : 파이토치는 텐서에서 이루어진 모든 연산을 기록해 놓는데 이 연산 기록에서 역전파가 이루어짐
+        # detach 함수는 연산 기록에서 역전파를 중단하고 분리한 텐서를 반환한다
+# cpu() : GPU 메모리에 올라가 있는 텐서를 CPU 메모리로 복사하는 함수다 numpy로 변환하기 위해선 먼저 해주어야한다.
+# uniform(A, B) : 균등 분포 A = min / B = max 
+# normal(A, B) : 정규 분포  A = 평균 / B = 분산
+# celi(number) : 무조건 소수점 올림
+
 def resume_training(checkpoint_path: str, config: GANConfig, data_dir: str, save_dir: str, device: torch.device):
     """이전 체크포인트에서 학습 재개"""
     print(f"\n=== Resuming training from {checkpoint_path} ===")
