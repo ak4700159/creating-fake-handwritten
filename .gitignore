@@ -8,5 +8,5 @@
 *.pth
 __pycache__/
 results*/
-*.csc
+*.csv
 message.py

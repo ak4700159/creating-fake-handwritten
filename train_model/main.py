@@ -32,6 +32,7 @@ def resume_training(checkpoint_path: str, config: GANConfig, data_dir: str, save
             param.requires_grad = False
         # 인코더의 가중치는 평가모드
         gan.encoder.eval()
+        gan.fine_tune = True
         
         print("Encoder loaded and frozen for transfer learning")
         
@@ -131,7 +132,7 @@ def train_font_gan(config: GANConfig, data_dir: str, save_dir: str, device: torc
     val_loader = DataLoader(
         val_dataset,
         batch_size=config.batch_size,
-        shuffle=False,
+        shuffle=True,
         num_workers=4,
         pin_memory=True
     )
@@ -255,22 +256,12 @@ def train_font_gan(config: GANConfig, data_dir: str, save_dir: str, device: torc
                     metrics['discriminator_acc'],
                     metrics['font_classification_acc']
                 ])
-        
 
         # 일정 주기로 체크포인트 저장
         if (epoch + 1) % config.model_save_step == 0: 
             timestamp = datetime.now().strftime("%m%d-%H%M")
             save_path = checkpoint_dir / f'checkpoint_epoch_{epoch+1}_{timestamp}.pth'
             save_checkpoint(gan, epoch, avg_losses, save_path)
-            
-            # 샘플 이미지 생성 및 저장
-            gan.save_samples(
-                sample_dir / f'samples_epoch_{epoch+1}_{timestamp}.png',
-                source[:8].to(device), 
-                target[:8].to(device), 
-                font_ids[:8].to(device),
-                font_embeddings
-            )
         
         # 최고 성능 모델 저장
         current_loss = avg_losses['g_loss']

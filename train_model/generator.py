@@ -167,8 +167,8 @@ class FontGAN(nn.Module):
                 save_image(
                     comparison,
                     save_path,
-                    nrow=1,  # 각 행에 하나의 샘플 세트
-                    padding=10,  # 이미지 간 여백
+                    nrow=4,  # 각 행에 하나의 샘플 세트
+                    padding=5,  # 이미지 간 여백
                     normalize=False
                 )
                 
@@ -182,7 +182,6 @@ class FontGAN(nn.Module):
             # 이전 학습/평가 모드로 복원
             if was_training:
                 self.train()
-    
 
     def _adversial_loss(self, d_real_patch: torch.Tensor, d_fake_patch: torch.Tensor) -> torch.Tensor:
         """
@@ -199,7 +198,6 @@ class FontGAN(nn.Module):
 
     def train_step(self, real_source, real_target, font_embeddings, font_ids):
         """배치별 학습을 진행하는 함수
-        
         Args:
             real_source (torch.Tensor): 원본 고딕체 이미지 배치
             real_target (torch.Tensor): 실제 손글씨 이미지 배치
@@ -266,13 +264,13 @@ class FontGAN(nn.Module):
         
         # 생성자의 losses, 생성자 손실값에 각 각의 가중치를 부여
         # 1) g_loss_adv : 생성자가 판별자를 속이기 위한 손실값, 가짜 이미지 텐소의 스코어가 1에 가깝도록 학습 
-        g_loss_adv = self.bce_loss(g_fake_patch, torch.ones_like(g_fake_patch)) * self.config.lambda_adv
+        g_loss_adv = self.bce_loss(g_fake_patch, torch.ones_like(g_fake_patch)) * self.config.adv_lambda
         # 2) l1_loss : 생성된 이미지와 기존 폰트 글자와의 차이(pixel by pixel)  
         g_loss_l1 = self.l1_loss(fake_target, real_target) * l1_lambda
         # 3) const_loss : 기존 글자 특징 유지 
         g_loss_const = self._consistency_loss(encoded_source, fake_target) * const_lambda
         # 4) category_loss : 생성한 가짜 데이터의 카테고리에 대한 손실값, 생성한 가짜 데이터를 더 잘 분류하기 위함
-        g_loss_cat = self.bce_loss(g_fake_cat, F.one_hot(font_ids, self.config.fonts_num).float())  * self.config.lambda_cat
+        g_loss_cat = self.bce_loss(g_fake_cat, F.one_hot(font_ids, self.config.fonts_num).float())  * self.config.cat_lambda
         g_total_loss = g_loss_adv + g_loss_l1 + g_loss_const + g_loss_cat
         
         # 생성자 가중치 조정
@@ -290,7 +288,7 @@ class FontGAN(nn.Module):
             'cat_loss': g_loss_cat.item()
         }
 
-    def evaluate_metrics(self, dataer, font_embeddings):
+    def evaluate_metrics(self, val_loader, font_embeddings):
         """모델 성능 평가 함수"""
         self.eval()  
         metrics = {
@@ -303,10 +301,10 @@ class FontGAN(nn.Module):
         try:
             with torch.no_grad():
                 # 데이터 로더가 비어있는지 확인
-                if len(dataer) == 0:
+                if len(val_loader) == 0:
                     raise ValueError("ValDataer is empty")
                     
-                for batch_idx, (source, target, font_ids) in enumerate(dataer):
+                for batch_idx, (source, target, font_ids) in enumerate(val_loader):
                     source = source.to(self.device)
                     target = target.to(self.device)
                     font_ids = font_ids.to(self.device)
@@ -362,28 +360,28 @@ class FontGAN(nn.Module):
         finally:
             self.train()
 
-    def generate_evaluation_samples(self, dataer, font_embeddings, save_dir: Path):
+    def generate_evaluation_samples(self, val_loader, font_embeddings, save_dir: Path):
         self.eval()
         save_dir.mkdir(parents=True, exist_ok=True)
         
         # 전체 데이터셋에서 서로 다른 폰트를 가진 샘플 수집
         unique_samples = {}
-        
-        for source, target, font_ids in dataer:
+        # 평가용 데이터셋에서 배치 사이즈만큼 데이터 추출
+        for source, target, font_ids in val_loader:
+            # 
             for i, font_id in enumerate(font_ids):
                 font_id = font_id.item()
-                if font_id not in unique_samples and len(unique_samples) < 10:
-                    unique_samples[font_id] = (source[i:i+1], target[i:i+1])
-                if len(unique_samples) == 10:
+                if font_id not in unique_samples and len(unique_samples) < self.config.eval_fonts:
+                    unique_samples[font_id] = (source[i:i+self.config.eval_samples], target[i:i+self.config.eval_samples])
+                if len(unique_samples) == self.config.eval_fonts:
                     break
-            if len(unique_samples) == 10:
+            if len(unique_samples) == self.config.eval_fonts:
                 break
         # 수집된 샘플로 이미지 생성
         with torch.no_grad():
             for idx, (font_id, (source, target)) in enumerate(unique_samples.items()):
                 # 배치 차원을 유지하면서 텐서 생성
-                if type(font_id) is int : font_id_tensor = torch.tensor([[font_id]], device=self.device).long()
-                
+                if type(font_id) is int : font_id_tensor = torch.tensor([font_id], device=self.device).long()
                 self.save_samples(
                     save_dir / f'eval_sample_font_{font_id}.png',
                     source,
